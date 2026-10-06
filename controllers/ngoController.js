@@ -55,7 +55,7 @@ exports.registerNGO = async (req, res, next) => {
     await NGO.create(connection, userResult.insertId, req.body);
     await connection.commit();
     const user = { id: userResult.insertId, full_name: req.body.fullName, email: req.body.email, role: 'ngo' };
-    return res.status(201).json({ success: true, message: 'NGO registration successful.', token: tokenFor(user), user: { id: user.id, name: user.full_name, role: user.role } });
+    return res.status(201).json({ success: true, message: 'NGO registration received. An administrator must approve it before sign-in.', user: { id: user.id, name: user.full_name, role: user.role } });
   } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
 };
 
@@ -63,6 +63,8 @@ exports.loginNGO = async (req, res, next) => {
   try {
     const user = await User.findByEmail(req.body.email);
     if (!user || user.role !== 'ngo' || !(await bcrypt.compare(req.body.password, user.password))) return res.status(401).json({ success: false, message: 'Invalid NGO email or password.' });
+    const ngo = await NGO.findByUserId(user.id);
+    if (!ngo || ngo.account_status !== 'active') return res.status(403).json({ success: false, message: ngo?.account_status === 'pending' ? 'Your NGO application is awaiting administrator approval.' : 'Your NGO account is not active.' });
     return res.json({ success: true, message: 'Login successful.', token: tokenFor(user), user: { id: user.id, name: user.full_name, role: user.role } });
   } catch (error) { next(error); }
 };
@@ -131,18 +133,10 @@ exports.acceptDonation = async (req, res, next) => {
       await sendNotification({
         recipientUserId: dInfo.business_user_id,
         title: '🤝 Donation Accepted by NGO!',
-        message: `Your donation "${dInfo.food_name}" has been accepted by ${ngo.ngo_name || 'an NGO'}. A pickup volunteer will be assigned shortly.`,
+        message: `Your donation "${dInfo.food_name}" has been accepted by ${ngo.ngo_name || 'an NGO'}. The NGO will coordinate collection directly.`,
         connection
       });
     }
-
-    // Broadcast to online volunteers
-    await sendNotification({
-      targetRole: 'volunteer',
-      title: '🚚 New Pickup Route Available',
-      message: `Pickup available for ${ngo.ngo_name || 'an NGO'}: "${dInfo?.food_name || 'Food rescue'}". Accept pickup in your portal!`,
-      connection
-    });
 
     await connection.commit();
     return res.json({ success: true, message: 'Donation accepted successfully! Points awarded.' });
@@ -174,35 +168,24 @@ exports.confirmDelivery = async (req, res, next) => {
       await connection.rollback();
       return res.status(400).json({ success: false, message: 'Donation delivery cannot be confirmed at this stage or does not belong to your NGO.' });
     }
-    await connection.execute(`UPDATE pickup_requests SET status = 'completed' WHERE donation_id = ?`, [req.params.id]);
-
-    // Fetch volunteer & donor user IDs
-    const [pRows] = await connection.execute(
-      `SELECT pr.volunteer_id, v.user_id AS volunteer_user_id, d.business_user_id, d.food_name, d.number_of_meals
-       FROM pickup_requests pr
-       JOIN donations d ON d.id = pr.donation_id
-       LEFT JOIN volunteers v ON v.id = pr.volunteer_id
-       WHERE pr.donation_id = ?`,
+    const [donationRows] = await connection.execute(
+      'SELECT business_user_id, food_name, number_of_meals FROM donations WHERE id = ?',
       [req.params.id]
     );
-    const pInfo = pRows[0];
+    const donation = donationRows[0];
 
     // Award completion points:
     // NGO: 100 points
     await awardPoints(req.user.id, 100, connection);
-    if (pInfo) {
+    if (donation) {
       // Donor: 50 completion bonus points
-      await awardPoints(pInfo.business_user_id, 50, connection);
-      // Volunteer: 100 points
-      if (pInfo.volunteer_user_id) {
-        await awardPoints(pInfo.volunteer_user_id, 100, connection);
-      }
+      await awardPoints(donation.business_user_id, 50, connection);
 
       // Notify donor
       await sendNotification({
-        recipientUserId: pInfo.business_user_id,
+        recipientUserId: donation.business_user_id,
         title: '🎉 Rescue Completed & Certificate Ready!',
-        message: `Your donation "${pInfo.food_name}" was safely distributed to beneficiaries! You earned 50 impact points and your digital certificate is ready in your dashboard.`,
+        message: `Your donation "${donation.food_name}" was safely distributed to beneficiaries! You earned 50 impact points and your digital certificate is ready in your dashboard.`,
         connection
       });
     }

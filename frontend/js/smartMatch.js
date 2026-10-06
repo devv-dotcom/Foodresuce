@@ -15,7 +15,7 @@ export const openSmartMatchModal = async (donationId) => {
             <button type="button" class="fb-modal-close" data-action="close-smart-match">&times;</button>
           </header>
           <div class="fb-modal-body" id="smart-match-content">
-            <div class="loading-state">Analyzing proximity, NGO capacity, and volunteer vehicle fit…</div>
+            <div class="loading-state">Analyzing proximity, NGO capacity, and availability…</div>
           </div>
         </div>
       `;
@@ -28,10 +28,10 @@ export const openSmartMatchModal = async (donationId) => {
 
     modal.classList.add('active');
     const container = document.getElementById('smart-match-content');
-    container.innerHTML = '<div class="loading-state">Analyzing proximity, NGO capacity, and volunteer vehicle fit…</div>';
+    container.innerHTML = '<div class="loading-state">Analyzing proximity, NGO capacity, and availability…</div>';
 
-    const response = await request(`/api/donations/smart-match/${donationId}`, { auth: false });
-    const { donation, recommendedNgo, recommendedVolunteer, topNgos, topVolunteers } = response;
+    const response = await request(`/api/donations/smart-match/${donationId}`);
+    const { donation, recommendedNgo } = response;
 
     const urgencyTag = donation.isUrgent
       ? '<span class="status-pill status-cancelled">🚨 CRITICAL URGENCY (< 2.5h)</span>'
@@ -57,21 +57,6 @@ export const openSmartMatchModal = async (donationId) => {
           <p>⏱️ Turnaround ETA: <strong>~${recommendedNgo?.estimatedTransitMins} mins</strong></p>
           <p>📦 Active Rescues in Queue: ${recommendedNgo?.pendingRescues || 0}</p>
         </div>
-
-        <!-- Recommended Volunteer -->
-        <div class="smart-match-card vol-recommendation">
-          <div class="match-badge">⚡ BEST FIT VOLUNTEER</div>
-          <h3>${escapeHtml(recommendedVolunteer?.name || 'Searching online volunteers…')}</h3>
-          <div class="match-score-bar">
-            <span>Volunteer Score</span>
-            <strong>${recommendedVolunteer?.matchScore || 90}%</strong>
-            <div class="progress-bar"><div style="width: ${recommendedVolunteer?.matchScore || 90}%;"></div></div>
-          </div>
-          <p>📍 Distance: <strong>${recommendedVolunteer?.distanceKm} km away</strong></p>
-          <p>🚗 Vehicle: <strong>${escapeHtml(recommendedVolunteer?.vehicleType || 'Any')}</strong></p>
-          <p>⭐ Rating: ${recommendedVolunteer?.rating || 5.0} &bull; Rescues: ${recommendedVolunteer?.completedDeliveries || 0}</p>
-          <p>⏱️ Estimated Pickup Arrival: <strong>~${recommendedVolunteer?.etaMinutes || 15} mins</strong></p>
-        </div>
       </div>
 
       <div class="smart-actions">
@@ -84,7 +69,7 @@ export const openSmartMatchModal = async (donationId) => {
         e.target.disabled = true;
         e.target.textContent = 'Broadcasting…';
         await request(`/api/donations/emergency-broadcast/${donation.id}`, { method: 'POST' });
-        toast('Emergency Alert broadcasted to all nearby volunteers and NGOs!');
+        toast('Emergency alert broadcasted to verified NGOs.');
         modal.classList.remove('active');
       } catch (err) {
         notifyError(err);

@@ -8,10 +8,9 @@ exports.getPublicImpact = async (_req, res, next) => {
       pool.execute(`SELECT COALESCE(SUM(number_of_meals), 0) AS mealsServed, COUNT(*) AS completedDonations
         FROM donations WHERE deleted_at IS NULL AND status IN ('delivered', 'completed')`),
       pool.execute(`SELECT COUNT(*) AS activeRescues FROM donations
-        WHERE deleted_at IS NULL AND status IN ('available', 'accepted', 'volunteer_assigned', 'picked_up')`)
+        WHERE deleted_at IS NULL AND status IN ('available', 'accepted')`)
     ]);
     return res.json({ success: true, impact: {
-      foodRescuedKg: 0,
       mealsServed: Number(totals.mealsServed || 0),
       peopleServed: Number(totals.mealsServed || 0),
       activeRescues: Number(active[0]?.activeRescues || 0),

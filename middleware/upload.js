@@ -7,7 +7,7 @@ const destinations = {
   logo: path.join(uploadRoot, 'business-logo'),
   cover: path.join(uploadRoot, 'business-cover'),
   food: path.join(uploadRoot, 'food-images'),
-  volunteerProfile: path.join(uploadRoot, 'volunteer-profile'),
+  profile: path.join(uploadRoot, 'profile'),
   deliveryProof: path.join(uploadRoot, 'delivery-proof')
 };
 Object.values(destinations).forEach(folder => fs.mkdirSync(folder, { recursive: true }));
@@ -56,7 +56,7 @@ const uploadVolunteerProfile = (req, res, next) => {
   volunteerUpload.single('image')(req, res, next);
 };
 const uploadProfileImage = (req, res, next) => {
-  req.uploadImageType = 'volunteerProfile';
+  req.uploadImageType = 'profile';
   req.uploadImageMaxSize = '5MB';
   volunteerUpload.single('image')(req, res, next);
 };

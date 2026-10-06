@@ -16,17 +16,13 @@ const authRoutes = require('./routes/authRoutes');
 const businessRoutes = require('./routes/businessRoutes');
 const donationRoutes = require('./routes/donationRoutes');
 const ngoRoutes = require('./routes/ngoRoutes');
-const volunteerRoutes = require('./routes/volunteerRoutes');
-const pickupRoutes = require('./routes/pickupRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const contactRoutes = require('./routes/contactRoutes');
-const notificationRoutes = require('./routes/notificationRoutes');
-const assignmentRoutes = require('./routes/assignmentRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const impactRoutes = require('./routes/impactRoutes');
-const partnerRoutes = require('./routes/partnerRoutes');
 const commonRoutes = require('./routes/commonRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 const { runAutoMigration } = require('./database/autoMigrate');
 
 const app = express();
@@ -82,16 +78,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/business', businessRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/ngo', ngoRoutes);
-app.use('/api/volunteer', volunteerRoutes);
-app.use('/api/pickups', pickupRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/contact', contactRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/assignments', assignmentRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/impact', impactRoutes);
-app.use('/api/partner', partnerRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/api', commonRoutes);
 // Explicit HTML page routes – ensures every dashboard is served correctly
 // even if express.static has path-matching issues on some systems
@@ -99,7 +91,7 @@ const sendPage = (...parts) => (_req, res) => res.sendFile(path.join(__dirname, 
 // The former generic dashboard mixed receiver and NGO functionality.  Keep
 // old bookmarks safe, but route them through real sign-in and role routing.
 app.get('/dashboard.html',           (_req, res) => res.redirect(302, '/login.html'));
-app.get('/partner/dashboard.html',  sendPage('partner', 'dashboard.html'));
+app.get('/partner/dashboard.html',  (_req, res) => res.redirect(302, '/ngo/dashboard.html'));
 app.get('/business/dashboard.html', sendPage('business', 'dashboard.html'));
 app.get('/ngo/dashboard.html',      sendPage('ngo',       'dashboard.html'));
 app.get('/volunteer/dashboard.html', (_req, res) => res.redirect(302, '/login.html'));

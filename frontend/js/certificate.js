@@ -11,7 +11,7 @@ export const downloadCertificate = async (donationId) => {
   try {
     toast('Generating official donation certificate…');
     await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js');
-    const response = await request(`/api/certificate/${donationId}`, { auth: false });
+    const response = await request(`/api/certificate/${donationId}`);
     const c = response.certificate;
 
     const { jsPDF } = window.jspdf;
@@ -57,7 +57,7 @@ export const downloadCertificate = async (donationId) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(90, 100, 90);
-    doc.text(`${c.donor.address || ''}, ${c.donor.city || ''}`, 148.5, 78, { align: 'center' });
+    doc.text(`${c.donor.city || ''}`, 148.5, 78, { align: 'center' });
 
     // Body
     doc.setFont('times', 'normal');
@@ -70,25 +70,19 @@ export const downloadCertificate = async (donationId) => {
 
     // Impact Metrics Box
     doc.setFillColor(240, 248, 240);
-    doc.roundedRect(25, 108, 247, 36, 4, 4, 'F');
+    doc.roundedRect(55, 108, 187, 36, 4, 4, 'F');
     doc.setDrawColor(180, 220, 180);
-    doc.roundedRect(25, 108, 247, 36, 4, 4, 'S');
+    doc.roundedRect(55, 108, 187, 36, 4, 4, 'S');
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
     doc.setTextColor(29, 102, 56);
-    doc.text(`${c.donationDetails.mealsRescued}`, 55, 122, { align: 'center' });
-    doc.text(`${c.donationDetails.kgFoodSaved} KG`, 115, 122, { align: 'center' });
-    doc.text(`${c.donationDetails.co2AvoidedKg} KG`, 175, 122, { align: 'center' });
-    doc.text(`${c.donationDetails.beneficiariesReached}`, 235, 122, { align: 'center' });
+    doc.text(`${c.donationDetails.mealsRescued}`, 148.5, 122, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(70, 85, 70);
-    doc.text('MEALS RESCUED', 55, 131, { align: 'center' });
-    doc.text('FOOD SAVED', 115, 131, { align: 'center' });
-    doc.text('CO₂ PREVENTED', 175, 131, { align: 'center' });
-    doc.text('PEOPLE NOURISHED', 235, 131, { align: 'center' });
+    doc.text('VERIFIED MEALS RESCUED', 148.5, 131, { align: 'center' });
 
     // Partner Details
     doc.setFont('helvetica', 'bold');

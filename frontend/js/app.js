@@ -17,6 +17,7 @@ import {
   initExpiryCountdowns
 } from './features.js';
 import { initFreshnessPredictor } from './freshness.js';
+import { initDonationChat } from './chat.js';
 
 const boot = async () => {
   if (!protectRoute()) return;
@@ -29,6 +30,7 @@ const boot = async () => {
   initDonationFilters();
   initPdfReports();
   initFreshnessPredictor();
+  initDonationChat();
   initExpiryCountdowns();
   initEmergencyBanner();
 

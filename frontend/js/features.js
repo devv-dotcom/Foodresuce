@@ -235,22 +235,6 @@ export const initLiveOperationsMap = async () => {
         markers.push([ngo.latitude, ngo.longitude]);
       });
 
-      // 3. Online NGO Fleet (Blue trucks)
-      (mapData.volunteers || []).forEach(v => {
-        if (!v.latitude || !v.longitude) return;
-        const volMarker = window.L.circleMarker([v.latitude, v.longitude], {
-          radius: 7,
-          fillColor: '#2563eb',
-          color: '#fff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.9
-        }).addTo(map);
-
-        volMarker.bindPopup(`<b>🚚 NGO Fleet Vehicle</b><br>${escapeHtml(v.full_name)}<br>Vehicle: ${escapeHtml(v.vehicle_type || 'Vehicle')}`);
-        markers.push([v.latitude, v.longitude]);
-      });
-
       if (markers.length > 0) {
         map.fitBounds(markers, { padding: [30, 30], maxZoom: 13 });
       }

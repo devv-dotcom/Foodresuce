@@ -21,21 +21,7 @@ exports.getLeaderboard = async (req, res, next) => {
       LIMIT 10
     `, BUSINESS_ROLES);
 
-    // 2. Top Volunteers
-    const [volunteers] = await pool.execute(`
-      SELECT v.id AS volunteer_id, u.id AS user_id, u.full_name AS name, u.city,
-             COALESCE(u.impact_points, 0) AS impact_points,
-             COALESCE(u.badge_level, 'Bronze Hero') AS badge_level,
-             v.completed_deliveries,
-             v.rating,
-             v.vehicle_type
-      FROM volunteers v
-      JOIN users u ON u.id = v.user_id
-      ORDER BY v.completed_deliveries DESC, v.rating DESC, impact_points DESC
-      LIMIT 10
-    `);
-
-    // 3. Top NGOs
+    // 2. Top NGOs
     const [ngos] = await pool.execute(`
       SELECT n.id AS ngo_id, n.ngo_name AS name, u.city,
              COALESCE(u.impact_points, 0) AS impact_points,
@@ -58,7 +44,6 @@ exports.getLeaderboard = async (req, res, next) => {
       success: true,
       period,
       topDonors: addRanks(donors),
-      topVolunteers: addRanks(volunteers),
       topNgos: addRanks(ngos)
     });
   } catch (error) {

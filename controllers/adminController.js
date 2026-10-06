@@ -37,7 +37,6 @@ exports.login = async (req, res, next) => {
 
 exports.listBusinesses = async (req, res, next) => { try { return res.json({ success: true, businesses: await Admin.listBusinesses({ q: req.query.q?.trim(), category: req.query.category, ...page(req.query) }) }); } catch (error) { next(error); } };
 exports.listNgos = async (req, res, next) => { try { return res.json({ success: true, ngos: await Admin.listNgos({ q: req.query.q?.trim(), ...page(req.query) }) }); } catch (error) { next(error); } };
-exports.listVolunteers = async (req, res, next) => { try { return res.json({ success: true, volunteers: await Admin.listVolunteers({ q: req.query.q?.trim(), ...page(req.query) }) }); } catch (error) { next(error); } };
 
 const changeAccount = (kind, status, message) => async (req, res, next) => {
   const connection = await pool.getConnection();
@@ -57,8 +56,6 @@ exports.activateBusiness = changeAccount('business', 'active', 'Business Activat
 exports.approveNgo = changeAccount('ngo', 'active', 'NGO Approved Successfully');
 exports.rejectNgo = changeAccount('ngo', 'rejected', 'NGO Rejected Successfully');
 exports.suspendNgo = changeAccount('ngo', 'suspended', 'NGO Suspended Successfully');
-exports.approveVolunteer = changeAccount('volunteer', 'active', 'Volunteer Approved Successfully');
-exports.suspendVolunteer = changeAccount('volunteer', 'suspended', 'Volunteer Suspended Successfully');
 
 const deleteAccount = kind => async (req, res, next) => {
   const connection = await pool.getConnection();
@@ -73,7 +70,6 @@ const deleteAccount = kind => async (req, res, next) => {
 };
 exports.deleteBusiness = deleteAccount('business');
 exports.deleteNgo = deleteAccount('ngo');
-exports.deleteVolunteer = deleteAccount('volunteer');
 
 exports.listDonations = async (req, res, next) => {
   try {

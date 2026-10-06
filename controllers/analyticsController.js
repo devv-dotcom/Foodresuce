@@ -18,7 +18,7 @@ exports.getPublicAnalytics = async (_req, res, next) => {
   } catch (error) { next(error); }
 };
 
-exports.getMapData = async (_req, res, next) => {
+exports.getMapData = async (req, res, next) => {
   try {
     const data = await Analytics.mapData();
     return res.json({ success: true, mapData: data });

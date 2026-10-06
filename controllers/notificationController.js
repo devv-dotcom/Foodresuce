@@ -25,7 +25,7 @@ exports.remove = async (req, res, next) => {
 };
 exports.markRead = async (req, res, next) => {
   try {
-    if (!(await Notification.markRead(req.params.id, req.user.id))) return res.status(404).json({ success: false, message: 'Notification not found.' });
+    if (!(await Notification.markRead(req.params.id, req.user.id, req.user.role))) return res.status(404).json({ success: false, message: 'Notification not found.' });
     return res.json({ success: true, message: 'Notification marked as read.' });
   } catch (error) { next(error); }
 };

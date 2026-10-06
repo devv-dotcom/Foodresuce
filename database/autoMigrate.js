@@ -47,6 +47,36 @@ async function runAutoMigration() {
         // Ignored if already modified or constraint prevents
       }
 
+      // New NGO registrations require an administrator approval. Existing
+      // account states are retained; only the schema default changes.
+      try {
+        await connection.query("ALTER TABLE ngos MODIFY COLUMN account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'pending'");
+      } catch (err) {
+        console.warn('[MIGRATION] Could not update the NGO verification default:', err.message);
+      }
+
+      await connection.query(`CREATE TABLE IF NOT EXISTS donation_conversations (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, donation_id BIGINT UNSIGNED NOT NULL,
+        donor_user_id BIGINT UNSIGNED NOT NULL, ngo_user_id BIGINT UNSIGNED NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id), UNIQUE KEY uq_donation_conversations_donation (donation_id),
+        KEY idx_donation_conversations_donor (donor_user_id), KEY idx_donation_conversations_ngo (ngo_user_id),
+        CONSTRAINT fk_donation_conversations_donation FOREIGN KEY (donation_id) REFERENCES donations(id) ON DELETE CASCADE,
+        CONSTRAINT fk_donation_conversations_donor FOREIGN KEY (donor_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        CONSTRAINT fk_donation_conversations_ngo FOREIGN KEY (ngo_user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB`);
+      await connection.query(`CREATE TABLE IF NOT EXISTS donation_messages (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, conversation_id BIGINT UNSIGNED NOT NULL,
+        sender_user_id BIGINT UNSIGNED NOT NULL, recipient_user_id BIGINT UNSIGNED NOT NULL,
+        body VARCHAR(2000) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, read_at DATETIME NULL,
+        PRIMARY KEY (id), KEY idx_donation_messages_conversation (conversation_id, created_at),
+        KEY idx_donation_messages_unread (recipient_user_id, read_at),
+        CONSTRAINT fk_donation_messages_conversation FOREIGN KEY (conversation_id) REFERENCES donation_conversations(id) ON DELETE CASCADE,
+        CONSTRAINT fk_donation_messages_sender FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        CONSTRAINT fk_donation_messages_recipient FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB`);
+
       console.log('[MIGRATION] Food Rescue Database V3 Schema verified.');
     } finally {
       connection.release();

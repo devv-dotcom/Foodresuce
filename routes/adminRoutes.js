@@ -29,11 +29,6 @@ router.put('/ngo/reject/:id', admin.rejectNgo);
 router.put('/ngo/suspend/:id', admin.suspendNgo);
 router.delete('/ngo/:id', admin.deleteNgo);
 
-router.get('/volunteers', admin.listVolunteers);
-router.put('/volunteer/approve/:id', admin.approveVolunteer);
-router.put('/volunteer/suspend/:id', admin.suspendVolunteer);
-router.delete('/volunteer/:id', admin.deleteVolunteer);
-
 router.get('/donations', admin.listDonations);
 router.put('/donation/status/:id', donationStatusValidation, admin.updateDonationStatus);
 router.delete('/donation/:id', admin.deleteDonation);

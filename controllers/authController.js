@@ -44,7 +44,6 @@ const deliveryFailureMessage = error => {
 };
 
 
-const Volunteer = require('../models/Volunteer');
 const NGO = require('../models/NGO');
 
 exports.register = async (req, res, next) => {
@@ -84,11 +83,6 @@ exports.register = async (req, res, next) => {
          ON DUPLICATE KEY UPDATE business_name = VALUES(business_name), business_type = VALUES(business_type)`,
         [userId, req.body.businessName || req.body.fullName, role]
       );
-    } else if (role === 'volunteer') {
-      await Volunteer.create(connection, userId, {
-        vehicleType: req.body.vehicleType || 'Motorcycle / Scooter',
-        drivingLicenseNumber: req.body.drivingLicenseNumber || null
-      });
     } else if (role === 'ngo') {
       await NGO.create(connection, userId, {
         ngoName: req.body.ngoName || req.body.fullName,
@@ -99,6 +93,9 @@ exports.register = async (req, res, next) => {
 
     await connection.commit();
     const user = await User.findPublicById(userId);
+    if (role === 'ngo') {
+      return res.status(201).json({ success: true, message: 'NGO registration received. An administrator must approve it before sign-in.', user: serializeUser(user) });
+    }
     const token = signAccessToken(user);
 
     return res.status(201).json({ success: true, message: 'Registration successful! Welcome to Food Rescue.', token, user: serializeUser(user) });
@@ -130,16 +127,9 @@ exports.login = async (req, res, next) => {
       if (status === 'suspended') return res.status(403).json({ success: false, message: 'Your business account has been suspended.' });
     } else if (user.role === 'ngo') {
       const [rows] = await pool.execute('SELECT account_status FROM ngos WHERE user_id = ? LIMIT 1', [user.id]);
+      if (rows[0] && rows[0].account_status === 'pending') return res.status(403).json({ success: false, message: 'Your NGO application is awaiting administrator approval.' });
+      if (rows[0] && rows[0].account_status === 'rejected') return res.status(403).json({ success: false, message: 'Your NGO application was rejected.' });
       if (rows[0] && rows[0].account_status === 'suspended') return res.status(403).json({ success: false, message: 'Your NGO account has been suspended.' });
-    } else if (user.role === 'volunteer') {
-      const [rows] = await pool.execute('SELECT account_status FROM volunteers WHERE user_id = ? LIMIT 1', [user.id]);
-      if (rows[0] && rows[0].account_status === 'suspended') return res.status(403).json({ success: false, message: 'Your volunteer account has been suspended.' });
-    }
-
-    const isDev = process.env.NODE_ENV !== 'production';
-    // Volunteer login is outside the current Food Rescue authentication rollout.
-    if (isDev && user.role === 'volunteer') {
-      return res.json({ success: true, message: 'Signed in successfully.', token: signAccessToken(user), user: serializeUser(user) });
     }
 
     const otp = crypto.randomInt(100000, 1000000).toString();

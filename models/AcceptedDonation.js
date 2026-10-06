@@ -3,7 +3,10 @@ const PickupRequest = require('./PickupRequest');
 
 module.exports = {
   async accept(connection, donationId, ngoId) {
-    const [donation] = await connection.execute("UPDATE donations SET status = 'accepted' WHERE id = ? AND status = 'available'", [donationId]);
+    const [donation] = await connection.execute(
+      "UPDATE donations SET status = 'accepted' WHERE id = ? AND status = 'available' AND expiry_time > NOW() AND deleted_at IS NULL",
+      [donationId]
+    );
     if (!donation.affectedRows) return false;
     await connection.execute('INSERT INTO accepted_donations (donation_id, ngo_id) VALUES (?, ?)', [donationId, ngoId]);
     await PickupRequest.createForAcceptedDonation(connection, donationId, ngoId);

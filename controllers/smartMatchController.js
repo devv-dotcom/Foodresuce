@@ -19,6 +19,7 @@ exports.getSmartMatch = async (req, res, next) => {
     const donationId = req.params.id;
     const donation = await Donation.findById(donationId);
     if (!donation) return res.status(404).json({ success: false, message: 'Donation not found.' });
+    if (donation.business_user_id !== req.user.id) return res.status(403).json({ success: false, message: 'You can only match NGOs for your own donation.' });
 
     const now = Date.now();
     const expiryDate = new Date(donation.expiry_time).getTime();
@@ -31,8 +32,8 @@ exports.getSmartMatch = async (req, res, next) => {
 
     // Fetch active NGOs with location
     const [ngos] = await pool.execute(`
-      SELECT n.id AS ngo_id, n.user_id, n.ngo_name, u.full_name, u.mobile, u.address, u.city, u.latitude, u.longitude,
-             (SELECT COUNT(*) FROM accepted_donations ad WHERE ad.ngo_id = n.id AND ad.status IN ('accepted', 'volunteer_assigned', 'picked_up')) AS pending_count,
+      SELECT n.id AS ngo_id, n.user_id, n.ngo_name, u.full_name, u.city, u.latitude, u.longitude,
+             (SELECT COUNT(*) FROM accepted_donations ad WHERE ad.ngo_id = n.id AND ad.status = 'accepted') AS pending_count,
              (SELECT COUNT(*) FROM accepted_donations ad WHERE ad.ngo_id = n.id AND ad.status = 'completed') AS completed_count
       FROM ngos n
       JOIN users u ON u.id = n.user_id
@@ -61,51 +62,10 @@ exports.getSmartMatch = async (req, res, next) => {
         ngoId: ngo.ngo_id,
         ngoName: ngo.ngo_name || ngo.full_name,
         city: ngo.city,
-        mobile: ngo.mobile,
         distanceKm,
         estimatedTransitMins,
         matchScore: Math.min(99, Math.max(35, totalScore)),
         pendingRescues: ngo.pending_count
-      };
-    }).sort((a, b) => b.matchScore - a.matchScore);
-
-    // Fetch online volunteers with location
-    const [volunteers] = await pool.execute(`
-      SELECT v.id AS volunteer_id, v.user_id, u.full_name, u.mobile, u.city, u.latitude, u.longitude,
-             v.vehicle_type, v.availability, v.rating, v.completed_deliveries
-      FROM volunteers v
-      JOIN users u ON u.id = v.user_id
-      WHERE v.availability = 'online' AND (v.account_status = 'active' OR v.account_status IS NULL)
-    `);
-
-    const scoredVolunteers = volunteers.map(vol => {
-      let distanceKm = calculateDistance(donorLat, donorLon, Number(vol.latitude), Number(vol.longitude));
-      if (distanceKm === null) {
-        distanceKm = (vol.city && donorCity && vol.city.toLowerCase() === donorCity.toLowerCase()) ? 2.2 : 18.0;
-      }
-
-      // Volunteer proximity (Max 50)
-      const proximityScore = Math.max(0, 50 - (distanceKm * 2.5));
-      // Rating & experience (Max 35)
-      const performanceScore = (Number(vol.rating) * 5) + Math.min(10, vol.completed_deliveries);
-      // Vehicle capacity match
-      let vehicleScore = 15;
-      if (donation.number_of_meals > 60 && ['bike', 'scooter', 'bicycle'].includes((vol.vehicle_type || '').toLowerCase())) {
-        vehicleScore = 5; // Large meal batch needs car/van
-      }
-
-      const totalScore = Math.round(proximityScore + performanceScore + vehicleScore);
-      const etaMinutes = Math.max(8, Math.round((distanceKm / 25) * 60) + 6);
-
-      return {
-        volunteerId: vol.volunteer_id,
-        name: vol.full_name,
-        vehicleType: vol.vehicle_type,
-        rating: Number(vol.rating) || 5.0,
-        completedDeliveries: vol.completed_deliveries,
-        distanceKm,
-        etaMinutes,
-        matchScore: Math.min(99, Math.max(40, totalScore))
       };
     }).sort((a, b) => b.matchScore - a.matchScore);
 
@@ -120,9 +80,7 @@ exports.getSmartMatch = async (req, res, next) => {
         isUrgent
       },
       recommendedNgo: scoredNgos[0] || null,
-      recommendedVolunteer: scoredVolunteers[0] || null,
-      topNgos: scoredNgos.slice(0, 4),
-      topVolunteers: scoredVolunteers.slice(0, 4)
+      topNgos: scoredNgos.slice(0, 4)
     });
   } catch (error) {
     next(error);

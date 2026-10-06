@@ -41,7 +41,7 @@ exports.getDashboard = async (req, res, next) => {
       `SELECT 
         COUNT(*) AS totalDonations,
         SUM(status = 'completed') AS completedDonations,
-        SUM(status IN ('available', 'accepted', 'volunteer_assigned', 'picked_up', 'delivered')) AS pendingDonations,
+        SUM(status IN ('available', 'accepted', 'delivered')) AS pendingDonations,
         SUM(status = 'cancelled') AS cancelledDonations,
         COALESCE(SUM(number_of_meals), 0) AS foodSaved
        FROM donations 

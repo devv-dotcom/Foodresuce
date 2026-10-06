@@ -15,7 +15,7 @@ exports.getReports = async (req, res, next) => {
   try {
     if (!req.query.type) return res.json({ success: true, reports: await Report.list(Math.min(Number(req.query.limit) || 20, 100), Math.max(Number(req.query.offset) || 0, 0)) });
     const range = rangeFor(req.query.type);
-    if (!range) return res.status(422).json({ success: false, message: 'Report type must be daily, weekly, monthly, yearly, business, ngo, volunteer, or donation.' });
+    if (!range) return res.status(422).json({ success: false, message: 'Report type must be daily, weekly, monthly, yearly, business, NGO, or donation.' });
     const condition = range.sql ? `d.created_at >= ${range.from} AND d.created_at < DATE_ADD(${range.to}, INTERVAL 1 DAY)` : 'DATE(d.created_at) BETWEEN ? AND ?';
     const values = range.sql ? [] : [range.from, range.to];
     const [[summary], [byStatus], [byBusiness]] = await Promise.all([

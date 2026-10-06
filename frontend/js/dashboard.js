@@ -143,7 +143,7 @@ export const initBusinessDashboard = async () => {
   try {
     const [dashboard, donations, rewards] = await Promise.all([
       request('/api/business/dashboard'),
-      request('/api/donations'),
+      request('/api/business/donations'),
       request('/api/rewards/my-points').catch(() => ({ points: 0, badge: 'Bronze Hero' }))
     ]);
 
@@ -165,6 +165,9 @@ export const initBusinessDashboard = async () => {
       const smartAction = d.status === 'available'
         ? `<button type="button" class="btn-smart-sm" data-action="smart-match" data-id="${d.id}">🤖 AI Dispatch</button>`
         : '';
+      const chatAction = d.status !== 'available' && d.status !== 'cancelled'
+        ? `<button type="button" class="btn-smart-sm" data-action="open-chat" data-id="${d.id}">💬 Chat with NGO</button>`
+        : '';
 
       item.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:4px;">
@@ -176,6 +179,7 @@ export const initBusinessDashboard = async () => {
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           ${smartAction}
+          ${chatAction}
           ${formatStatus(d.status)}
           ${certAction}
         </div>
@@ -265,6 +269,7 @@ export const initNgoDashboard = async () => {
       const actionBtn = showConfirm && d.status !== 'completed'
         ? `<button type="button" class="btn-confirm" data-action="confirm-delivery" data-id="${d.id}">Confirm Delivery</button>`
         : formatStatus(d.status);
+      const chatAction = `<button type="button" class="btn-smart-sm" data-action="open-chat" data-id="${d.id}">💬 Chat with donor</button>`;
 
       card.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -274,6 +279,7 @@ export const initNgoDashboard = async () => {
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
             ${formatStatus(d.status)}
+            ${chatAction}
             ${actionBtn}
           </div>
         </div>

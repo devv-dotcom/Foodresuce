@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS ngos (
   user_id BIGINT UNSIGNED NOT NULL,
   ngo_name VARCHAR(160) NOT NULL,
   registration_number VARCHAR(100) NULL,
-  account_status ENUM('active', 'pending', 'suspended') NOT NULL DEFAULT 'active',
+  account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -86,4 +86,36 @@ CREATE TABLE IF NOT EXISTS accepted_donations (
   KEY idx_accepted_donations_ngo_status (ngo_id, status),
   CONSTRAINT fk_accepted_donations_donation FOREIGN KEY (donation_id) REFERENCES donations(id) ON DELETE CASCADE,
   CONSTRAINT fk_accepted_donations_ngo FOREIGN KEY (ngo_id) REFERENCES ngos(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS donation_conversations (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  donation_id BIGINT UNSIGNED NOT NULL,
+  donor_user_id BIGINT UNSIGNED NOT NULL,
+  ngo_user_id BIGINT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_donation_conversations_donation (donation_id),
+  KEY idx_donation_conversations_donor (donor_user_id),
+  KEY idx_donation_conversations_ngo (ngo_user_id),
+  CONSTRAINT fk_donation_conversations_donation FOREIGN KEY (donation_id) REFERENCES donations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_donation_conversations_donor FOREIGN KEY (donor_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_donation_conversations_ngo FOREIGN KEY (ngo_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS donation_messages (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  conversation_id BIGINT UNSIGNED NOT NULL,
+  sender_user_id BIGINT UNSIGNED NOT NULL,
+  recipient_user_id BIGINT UNSIGNED NOT NULL,
+  body VARCHAR(2000) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  read_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_donation_messages_conversation (conversation_id, created_at),
+  KEY idx_donation_messages_unread (recipient_user_id, read_at),
+  CONSTRAINT fk_donation_messages_conversation FOREIGN KEY (conversation_id) REFERENCES donation_conversations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_donation_messages_sender FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_donation_messages_recipient FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

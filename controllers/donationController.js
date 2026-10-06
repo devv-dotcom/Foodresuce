@@ -61,6 +61,9 @@ exports.getDonation = async (req, res, next) => {
   try {
     const donation = await Donation.findById(req.params.id);
     if (!donation) return res.status(404).json({ success: false, message: 'Donation not found.' });
+    if (req.user.role !== 'admin' && req.user.role !== 'ngo' && donation.business_user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this donation.' });
+    }
     donation.images = await Donation.getImages(donation.id);
     return res.json({ success: true, donation: enrichWithCountdown(donation) });
   } catch (error) { next(error); }
@@ -125,14 +128,10 @@ exports.emergencyBroadcast = async (req, res, next) => {
   try {
     const donation = await Donation.findById(req.params.id);
     if (!donation) return res.status(404).json({ success: false, message: 'Donation not found.' });
+    if (donation.business_user_id !== req.user.id) return res.status(403).json({ success: false, message: 'You can only broadcast an emergency for your own donation.' });
+    if (donation.status !== 'available' || new Date(donation.expiry_time) <= new Date()) return res.status(409).json({ success: false, message: 'Only available, unexpired donations can be broadcast as emergencies.' });
 
     await pool.execute('UPDATE donations SET is_emergency = TRUE WHERE id = ?', [donation.id]);
-
-    await sendNotification({
-      targetRole: 'volunteer',
-      title: '🚨 EMERGENCY RESCUE BROADCAST',
-      message: `URGENT RESCUE: ${donation.food_name} (${donation.quantity}) at ${donation.pickup_address || donation.city} needs immediate collection before spoiling!`
-    });
 
     await sendNotification({
       targetRole: 'ngo',
@@ -140,7 +139,7 @@ exports.emergencyBroadcast = async (req, res, next) => {
       message: `URGENT RESCUE: ${donation.food_name} (${donation.quantity}) needs immediate acceptance!`
     });
 
-    return res.json({ success: true, message: 'Emergency alert broadcasted to all active volunteers and NGOs!' });
+    return res.json({ success: true, message: 'Emergency alert broadcasted to verified NGOs.' });
   } catch (error) { next(error); }
 };
 

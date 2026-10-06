@@ -30,7 +30,6 @@ const requireActiveAccount = async (req, res, next) => {
     let sql = null;
     if (BUSINESS_ROLES.includes(req.user?.role)) sql = 'SELECT account_status FROM business_profiles WHERE user_id = ? LIMIT 1';
     if (req.user?.role === 'ngo') sql = 'SELECT account_status FROM ngos WHERE user_id = ? LIMIT 1';
-    if (req.user?.role === 'volunteer') sql = 'SELECT account_status FROM volunteers WHERE user_id = ? LIMIT 1';
     if (!sql) return next();
     const [rows] = await pool.execute(sql, [req.user.id]);
     // Accounts created by older modules may not yet have their optional profile row.

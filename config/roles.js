@@ -6,9 +6,8 @@ const BUSINESS_ROLES = Object.freeze([
 const ROLES = Object.freeze({
   ADMIN: 'admin',
   NGO: 'ngo',
-  VOLUNTEER: 'volunteer',
   ...Object.freeze(Object.fromEntries(BUSINESS_ROLES.map(role => [role.toUpperCase(), role])))
 });
-const ALL_ROLES = Object.freeze([ROLES.ADMIN, ...BUSINESS_ROLES, ROLES.NGO, ROLES.VOLUNTEER]);
+const ALL_ROLES = Object.freeze([ROLES.ADMIN, ...BUSINESS_ROLES, ROLES.NGO]);
 
 module.exports = { ROLES, ALL_ROLES, BUSINESS_ROLES };

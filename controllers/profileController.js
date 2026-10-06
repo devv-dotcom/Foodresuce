@@ -15,11 +15,6 @@ exports.getProfile = async (req, res, next) => {
         isVerified = Boolean(rows[0].is_verified);
         isActive = rows[0].account_status === 'active';
       }
-    } else if (user.role === 'volunteer') {
-      const [rows] = await pool.execute(`SELECT account_status FROM volunteers WHERE user_id = ? LIMIT 1`, [user.id]);
-      if (rows[0]) {
-        isActive = rows[0].account_status === 'active';
-      }
     }
 
     return res.json({
@@ -91,7 +86,7 @@ exports.updateProfile = async (req, res, next) => {
 exports.uploadProfileImage = async (req, res, next) => {
   try {
     if (!req.file) return res.status(422).json({ success: false, message: 'Profile image file is required.' });
-    const imageUrl = `/uploads/volunteer-profile/${req.file.filename}`;
+    const imageUrl = `/uploads/profile/${req.file.filename}`;
     
     await pool.execute(
       `UPDATE users SET profile_image = ? WHERE id = ?`,
