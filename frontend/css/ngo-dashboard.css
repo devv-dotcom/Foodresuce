@@ -6,7 +6,7 @@
 }
 .ngo-quick-nav a { flex: 0 0 auto; padding: 9px 13px; color: #365445; text-decoration: none; font-size: .82rem; font-weight: 800; border-radius: 9px; }
 .ngo-quick-nav a:hover, .ngo-quick-nav a:focus-visible { background: #eff8ef; color: #14532d; outline: 2px solid #86b98f; outline-offset: 1px; }
-.ngo-hero, #available-donations, #active-rescues, #ngo-live-map-title { scroll-margin-top: 132px; }
+.ngo-hero, #available-donations, #active-rescues { scroll-margin-top: 132px; }
 .ngo-welcome-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
 .ngo-welcome-line h1 { letter-spacing: -.035em; }
 .ngo-welcome-line p { max-width: 680px; }
