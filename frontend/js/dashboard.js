@@ -266,6 +266,11 @@ export const initNgoDashboard = async () => {
       setValues(profileResult.value.profile);
       const welcomeName = $('[data-api-value="fullName"]');
       if (welcomeName) welcomeName.textContent = profileResult.value.profile?.full_name || profileResult.value.profile?.ngo_name || 'NGO Partner';
+      const accountStatus = String(profileResult.value.profile?.account_status || 'active').toLowerCase();
+      const verification = $('[data-ngo-verification]');
+      const heroBadge = $('.ngo-hero-badge');
+      if (verification) verification.textContent = accountStatus === 'active' ? 'Active NGO partner' : `Account ${accountStatus.replaceAll('_', ' ')}`;
+      if (heroBadge) heroBadge.textContent = accountStatus === 'active' ? '🛡️ Active NGO Partner' : `🛡️ ${accountStatus.replaceAll('_', ' ')}`;
     }
     const ptsEl = document.querySelector('[data-metric="my-points"]');
     const badgeEl = document.querySelector('[data-metric="my-badge"]');
@@ -281,6 +286,7 @@ export const initNgoDashboard = async () => {
     const setTxt = (id, val) => { const el = $(`#${id}`); if (el) el.textContent = val; };
     setTxt('count-ngo-available', donations ? availItems.length : 'Unavailable');
     setTxt('count-ngo-active', history ? histItems.filter(d => !['completed', 'cancelled'].includes(d.pickup_status || d.status)).length : 'Unavailable');
+    setTxt('count-ngo-pending', history ? histItems.filter(d => ['accepted', 'pickup_scheduled'].includes(d.pickup_status === 'pending' ? d.status : (d.pickup_status || d.status))).length : 'Unavailable');
     setTxt('count-ngo-completed', history ? histItems.filter(d => (d.pickup_status || d.status) === 'completed').length : 'Unavailable');
     const totalImpact = histItems.reduce((sum, d) => sum + (Number(d.number_of_meals) || 0), 0);
     setTxt('count-ngo-impact', history ? (totalImpact > 0 ? `${totalImpact.toLocaleString()} meals` : '0') : 'Unavailable');
@@ -356,15 +362,49 @@ export const initNgoDashboard = async () => {
     if (locationStatus && donations?.locationRequired) {
       locationStatus.textContent = 'Food listings remain visible; share your location to prioritize nearby matches.';
     }
-    if (donations) renderList(availTarget, availItems, renderAvailableDonation, 'No food donations are currently available in your radius.');
+    const renderFilteredDonations = () => {
+      const query = ($('#ngo-food-search')?.value || '').trim().toLocaleLowerCase();
+      const category = $('#ngo-food-category')?.value || '';
+      const maxKmValue = $('#ngo-food-distance')?.value || 'all';
+      const maxKm = maxKmValue === 'all' ? null : Number(maxKmValue);
+      const urgentOnly = Boolean($('#ngo-food-urgent')?.checked);
+      const sort = $('#ngo-food-sort')?.value || 'recommended';
+      const filtered = availItems.filter(d => {
+        const terms = [d.food_name, d.category_name, d.pickup_address, d.pickup_city, d.business_city, d.business_name].join(' ').toLocaleLowerCase();
+        return (!query || terms.includes(query)) && (!category || String(d.category_name || '') === category)
+          && (maxKm === null || (d.distance_km !== null && d.distance_km !== undefined && Number(d.distance_km) <= maxKm))
+          && (!urgentOnly || d.is_urgent);
+      });
+      filtered.sort((a, b) => {
+        if (sort === 'nearest') return (a.distance_km ?? Infinity) - (b.distance_km ?? Infinity);
+        if (sort === 'urgent') return new Date(a.expiry_time) - new Date(b.expiry_time);
+        if (Boolean(a.is_emergency) !== Boolean(b.is_emergency)) return a.is_emergency ? -1 : 1;
+        if (Boolean(a.is_urgent) !== Boolean(b.is_urgent)) return a.is_urgent ? -1 : 1;
+        return (a.distance_km ?? Infinity) - (b.distance_km ?? Infinity);
+      });
+      const summary = $('#ngo-feed-summary');
+      if (summary) summary.textContent = `${filtered.length} of ${availItems.length} available donations`;
+      window.__ngoVisibleDonationIds = filtered.map(d => String(d.id));
+      window.dispatchEvent(new CustomEvent('ngo:donation-filters-changed', { detail: { ids: window.__ngoVisibleDonationIds } }));
+      renderList(availTarget, filtered, renderAvailableDonation, 'No available food matches these filters. Try widening the distance or clearing a filter.');
+      initExpiryCountdowns();
+    };
+    const categorySelect = $('#ngo-food-category');
+    if (categorySelect) [...new Set(availItems.map(d => d.category_name).filter(Boolean))].sort().forEach(category => categorySelect.add(new Option(category, category)));
+    ['#ngo-food-search', '#ngo-food-category', '#ngo-food-distance', '#ngo-food-sort', '#ngo-food-urgent'].forEach(selector => {
+      const input = $(selector);
+      input?.addEventListener(input.type === 'search' ? 'input' : 'change', renderFilteredDonations);
+    });
+    if (donations) renderFilteredDonations();
     const recommended = availItems.filter(d => d.recommended);
     renderList($('#recommended-donations-list'), recommended, renderAvailableDonation, 'No donations currently match your location and food-safety criteria.');
 
     // History Card Renderer
     if (history) renderList($('#ngo-history'), history.donations, d => {
       const card = document.createElement('article');
-      card.className = 'donation-card';
       const status = d.pickup_status === 'pending' ? d.status : (d.pickup_status || d.status);
+      card.className = 'donation-card ngo-rescue-card';
+      card.dataset.rescueStatus = status;
       let actionMarkup = formatStatus(status);
       if (status === 'accepted') actionMarkup = `<form data-ngo-schedule-form data-id="${d.id}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;"><label>Pickup date<input type="date" name="pickupDate" required></label><label>Pickup time<input type="time" name="pickupTime" required></label><button type="submit" class="btn-confirm">Schedule Pickup</button></form>`;
       else if (status === 'pickup_scheduled') actionMarkup = `<button type="button" class="btn-confirm" data-ngo-workflow="start" data-id="${d.id}">Start Pickup</button>`;
@@ -397,11 +437,33 @@ export const initNgoDashboard = async () => {
         <div style="margin-top:12px;">${actionMarkup}</div>
       `;
       return card;
-    }, 'No donation history yet.');
+    }, 'Your accepted donations and completed rescues will appear here.');
+
+    const rescueCards = $$('.ngo-rescue-card', $('#ngo-history'));
+    const historySummary = $('#ngo-history-summary');
+    const applyHistoryFilter = selected => {
+      let visible = 0;
+      rescueCards.forEach(card => {
+        const status = card.dataset.rescueStatus;
+        const matches = selected === 'all' || (selected === 'active' && !['completed', 'cancelled'].includes(status)) || (selected === 'completed' && status === 'completed');
+        card.hidden = !matches;
+        if (matches) visible += 1;
+      });
+      if (historySummary) historySummary.textContent = `${visible} ${selected === 'all' ? 'rescue records' : `${selected} rescues`}`;
+    };
+    $$('[data-history-filter]').forEach(button => button.addEventListener('click', () => {
+      $$('[data-history-filter]').forEach(tab => {
+        const active = tab === button;
+        tab.classList.toggle('is-active', active);
+        tab.setAttribute('aria-pressed', String(active));
+      });
+      applyHistoryFilter(button.dataset.historyFilter);
+    }));
+    if (history) applyHistoryFilter('all');
 
     initExpiryCountdowns();
   } catch (error) {
-    ['count-ngo-available', 'count-ngo-active', 'count-ngo-completed', 'count-ngo-impact'].forEach(id => {
+    ['count-ngo-available', 'count-ngo-active', 'count-ngo-pending', 'count-ngo-completed', 'count-ngo-impact'].forEach(id => {
       const metric = $(`#${id}`);
       if (metric) metric.textContent = 'Unavailable';
     });

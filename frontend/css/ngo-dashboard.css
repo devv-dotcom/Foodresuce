@@ -1,0 +1,59 @@
+/* NGO operations dashboard: keep the existing Food Rescue green and amber identity. */
+.ngo-quick-nav {
+  position: sticky; top: 70px; z-index: 90; display: flex; gap: 6px; overflow-x: auto;
+  padding: 10px max(24px, calc((100vw - 1200px) / 2)); background: rgba(255,255,255,.96);
+  border-bottom: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(15,23,42,.04); scrollbar-width: thin;
+}
+.ngo-quick-nav a { flex: 0 0 auto; padding: 9px 13px; color: #365445; text-decoration: none; font-size: .82rem; font-weight: 800; border-radius: 9px; }
+.ngo-quick-nav a:hover, .ngo-quick-nav a:focus-visible { background: #eff8ef; color: #14532d; outline: 2px solid #86b98f; outline-offset: 1px; }
+.ngo-hero, #available-donations, #active-rescues, #ngo-live-map-title { scroll-margin-top: 132px; }
+.ngo-welcome-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.ngo-welcome-line h1 { letter-spacing: -.035em; }
+.ngo-welcome-line p { max-width: 680px; }
+.ngo-verification { flex: 0 0 auto; margin-top: 8px; padding: 7px 12px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; background: rgba(255,255,255,.13); font-size: .76rem; font-weight: 800; }
+.ngo-hero a, .ngo-hero button, .ngo-stat-card, .donation-card { transition: box-shadow .18s ease, transform .18s ease; }
+.ngo-hero a:focus-visible, .ngo-hero button:focus-visible, .ngo-stat-card:focus-visible, .donation-card a:focus-visible, .donation-card button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
+.ngo-stat-card { min-height: 150px; }
+.ngo-stat-card:hover { box-shadow: 0 12px 26px rgba(20,83,45,.1); }
+.ngo-feed-tools { display: grid; grid-template-columns: minmax(210px, 2fr) repeat(3, minmax(135px, 1fr)) auto; gap: 10px; align-items: end; margin: 18px 0 4px; padding: 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; }
+.ngo-feed-tools label, .ngo-inline-form label, .ngo-distribution-form label { display: grid; gap: 6px; color: #506257; font-size: .74rem; font-weight: 800; }
+.ngo-feed-tools input, .ngo-feed-tools select, .ngo-inline-form input, .ngo-distribution-form input, .ngo-distribution-form textarea { min-width: 0; min-height: 42px; padding: 9px 11px; border: 1px solid #cbd8cc; border-radius: 9px; background: #fff; color: #1d2d20; font: 500 .83rem Manrope, system-ui, sans-serif; }
+.ngo-feed-tools input:focus, .ngo-feed-tools select:focus, .ngo-inline-form input:focus, .ngo-distribution-form input:focus, .ngo-distribution-form textarea:focus { outline: 3px solid rgba(22,101,52,.2); border-color: #168047; }
+.ngo-urgent-filter { display: flex !important; align-items: center; align-self: center; gap: 7px !important; white-space: nowrap; }
+.ngo-urgent-filter input { width: 17px; min-height: 17px; accent-color: #166534; }
+.ngo-feed-summary { min-height: 1.2em; margin: 5px 2px 12px !important; color: #637468 !important; font-size: .78rem !important; }
+.ngo-history-tools { display: flex; gap: 7px; margin: 0 0 8px; overflow-x: auto; }
+.ngo-history-filter { padding: 8px 13px !important; border: 1px solid #d7e2d7 !important; border-radius: 999px !important; background: #fff !important; color: #365445 !important; white-space: nowrap; }
+.ngo-history-filter.is-active { border-color: #166534 !important; background: #166534 !important; color: #fff !important; }
+.ngo-history-filter:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+.ngo-rescue-card { display: grid; gap: 13px; }
+.ngo-rescue-main, .ngo-rescue-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.ngo-rescue-main h3 { margin: 0 0 5px; color: #173b27; }
+.ngo-rescue-main p { margin: 0 0 4px; color: #526258; font-size: .84rem; }
+.ngo-rescue-main small { color: #78857b; }
+.ngo-rescue-actions > a, .ngo-rescue-actions > button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; }
+.ngo-inline-form, .ngo-distribution-form { display: flex; align-items: end; flex-wrap: wrap; gap: 9px; }
+.ngo-distribution-form { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); width: 100%; padding: 15px; border-radius: 12px; background: #f6faf5; }
+.ngo-distribution-form[hidden] { display: none; }
+.ngo-distribution-form textarea { resize: vertical; }
+.donation-card img { aspect-ratio: 16 / 8; object-fit: cover; background: #eef4ec; }
+.donation-card > div:last-child { flex-wrap: wrap; }
+.donation-card[hidden] { display: none !important; }
+@media (max-width: 900px) {
+  .ngo-feed-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ngo-quick-nav { top: 62px; }
+}
+@media (max-width: 600px) {
+  .ngo-quick-nav { top: 58px; padding-right: 14px; padding-left: 14px; }
+  .ngo-welcome-line { display: block; }
+  .ngo-verification { display: inline-flex; margin: 0 0 14px; }
+  .ngo-feed-tools { grid-template-columns: 1fr; padding: 12px; }
+  .ngo-rescue-actions { align-items: stretch; }
+  .ngo-rescue-actions > a, .ngo-rescue-actions > button { flex: 1 1 auto; }
+  .ngo-distribution-form { grid-template-columns: 1fr; }
+  .ngo-navbar { flex-wrap: wrap; gap: 10px; padding: 12px 14px !important; }
+  .ngo-navbar > div { max-width: 100%; overflow-x: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ngo-hero a, .ngo-hero button, .ngo-stat-card, .donation-card { transition: none; }
+}
