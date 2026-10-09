@@ -5,7 +5,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
-const backendRoots = ['config', 'controllers', 'database', 'middleware', 'models', 'routes', 'services', 'utils'];
+const backendRoots = ['config', 'controllers', 'database', 'middleware', 'models', 'routes', 'scripts', 'services', 'utils'];
 const files = [path.join(root, 'app.js')];
 
 function collect(directory) {

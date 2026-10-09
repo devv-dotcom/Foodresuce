@@ -28,6 +28,9 @@ async function runAutoMigration() {
       };
 
       // 1. Users table additions
+      await ensureColumn('users', 'login_otp', 'VARCHAR(255) NULL');
+      await ensureColumn('users', 'login_otp_expires_at', 'DATETIME NULL');
+      await ensureIndex('users', 'idx_users_login_otp_expiry', 'KEY idx_users_login_otp_expiry (login_otp_expires_at)');
       if (!(await helperCheckColumn('users', 'impact_points'))) {
         await connection.query(`ALTER TABLE users ADD COLUMN impact_points INT UNSIGNED NOT NULL DEFAULT 0 AFTER is_verified`);
         console.log('[MIGRATION] Added users.impact_points');

@@ -4,19 +4,27 @@ const pool = require('../config/database');
 const { ALL_ROLES } = require('../config/roles');
 
 const authenticate = async (req, res, next) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ success: false, message: 'Authentication token is required.' });
+
+  let payload;
   try {
-    const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-    if (!token) return res.status(401).json({ success: false, message: 'Authentication token is required.' });
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    payload = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    if (error.name === 'TokenExpiredError' || error.name === 'JsonWebTokenError' || error.name === 'NotBeforeError') {
+      return res.status(401).json({ success: false, message: 'Your session is invalid or has expired.' });
+    }
+    return next(error);
+  }
+
+  try {
     const user = await User.findPublicById(payload.sub);
     if (!user) return res.status(401).json({ success: false, message: 'User account was not found.' });
     if (!ALL_ROLES.includes(user.role)) return res.status(403).json({ success: false, message: 'This account role is no longer supported.' });
     req.user = user;
-    next();
-  } catch {
-    return res.status(401).json({ success: false, message: 'Your session is invalid or has expired.' });
-  }
+    return next();
+  } catch (error) { return next(error); }
 };
 
 const authorizeRoles = (...roles) => (req, res, next) => {

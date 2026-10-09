@@ -43,7 +43,7 @@ See `.env.example` for the complete list. Required settings include:
 
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (or the supported database URL variables).
 - `JWT_SECRET`, a long random value.
-- `ADMIN_EMAIL` and `ADMIN_PASSWORD` for the single administrator account. The server provisions/synchronizes that account on startup; administrator sign-in does not use OTP.
+- `ADMIN_EMAIL` and `ADMIN_PASSWORD` for the single administrator account. The server provisions that account on startup; administrator sign-in does not use OTP. After changing credentials or repairing setup, run `npm run admin:setup` from the project root. It uses the same `.env` loading order as the server, hashes the password, refuses to promote an email already used by a non-admin, and preserves an existing inactive admin status.
 - `RESEND_API_KEY` and `MAIL_FROM` for Resend email delivery. `MAIL_FROM` must use a verified sender domain. Brevo is retained as an optional fallback.
 - Sign-in OTP is temporarily paused by default; set `LOGIN_OTP_ENABLED=true` to require emailed codes again after sender delivery is working. Password recovery codes remain enabled.
 
@@ -56,7 +56,7 @@ npm run check
 npm test
 ```
 
-`npm run check` parses the server code and browser modules. `npm test` runs focused tests for donation timing eligibility and donor safety declarations. Full registration, database workflows, mail delivery, and visual browser checks require a configured database/provider and have not been simulated with production data.
+`npm run check` parses the server code and browser modules. `npm test` covers admin credential/token and role gates, database-auth error handling, donation timing eligibility, and donor safety declarations. Live database login, registration, database workflows, mail delivery, and visual browser checks require the configured database/provider and are not replaced by mocks.
 
 ## Known limitations
 

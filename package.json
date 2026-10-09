@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch app.js",
+    "admin:setup": "node scripts/setup-admin.js",
     "check": "node scripts/check-syntax.js",
     "test": "node --test"
   },

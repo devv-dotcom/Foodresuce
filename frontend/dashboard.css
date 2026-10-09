@@ -12,6 +12,14 @@ body { font-family: Manrope, system-ui, sans-serif; margin: 0; background: #f5f7
 .btn-notification { position: relative; background: #fff !important; color: #1d6638 !important; border: 1px solid #d8ded7 !important; border-radius: 50% !important; width: 42px; height: 42px; padding: 0 !important; display: grid; place-items: center; font-size: 1.15rem; }
 .bell-badge { position: absolute; top: -4px; right: -4px; background: #e11d48; color: #fff; font-size: 0.72rem; font-weight: 800; border-radius: 10px; padding: 2px 6px; }
 .btn-leaderboard-nav { background: #eab308 !important; color: #713f12 !important; border: 1px solid #ca8a04 !important; }
+.btn-chat-inbox { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: #4f46e5 !important; color: #fff !important; border: 1px solid #4338ca !important; border-radius: 10px !important; padding: 7px 12px !important; font-size: .82rem !important; }
+.chat-unread-badge { display: inline-grid; min-width: 18px; height: 18px; place-items: center; border-radius: 999px; padding: 0 4px; background: #e11d48; color: #fff; font-size: .68rem; font-weight: 800; }
+.chat-inbox-list { display: grid; gap: 8px; overflow: auto; padding: 14px; }
+.chat-thread { display: grid; gap: 4px; width: 100%; padding: 13px 14px !important; border: 1px solid #e2e8f0 !important; border-radius: 12px !important; background: #fff !important; color: #1d2d20 !important; text-align: left; }
+.chat-thread:hover { border-color: #a7c69b !important; background: #f8fbf5 !important; }
+.chat-thread strong { font-size: .92rem; }
+.chat-thread small { color: #647066; font-size: .76rem; }
+.chat-inbox-empty { margin: auto; padding: 28px 22px; color: #647066; text-align: center; line-height: 1.6; }
 
 /* Notification Drawer */
 .notification-drawer { display: none; position: fixed; top: 82px; right: 24px; width: 390px; max-width: calc(100vw - 32px); background: #fff; border-radius: 20px; box-shadow: 0 24px 60px rgba(15,23,42,.2); border: 1px solid #dce6dc; z-index: 1000; overflow: hidden; }

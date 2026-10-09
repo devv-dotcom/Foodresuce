@@ -120,9 +120,16 @@ app.get('*', (_req, res) => res.status(404).sendFile(path.join(__dirname, 'front
 app.use((error, _req, res, _next) => {
   console.error(error);
   const databaseUnavailable = new Set([
+    'EACCES',
     'ECONNREFUSED',
     'ECONNRESET',
+    'ETIMEDOUT',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'ENOTFOUND',
+    'EPIPE',
     'PROTOCOL_CONNECTION_LOST',
+    'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR',
     'ER_ACCESS_DENIED_ERROR',
     'ER_BAD_DB_ERROR'
   ]);
@@ -144,7 +151,13 @@ const startServer = async () => {
   // Apply additive schema updates before accepting traffic so handlers never
   // race startup migrations on the first request after a deploy.
   await runAutoMigration();
-  await seedAdminAccount();
+  try {
+    await seedAdminAccount();
+  } catch (error) {
+    // Keep health/API routes online so the database failure is reported as a
+    // 503 to clients instead of silently converting it to an auth failure.
+    console.error('[Admin Seed] Provisioning failed; administrator sign-in may be unavailable.', error.code || 'ADMIN_SEED_FAILED');
+  }
   app.listen(port, () => console.log(`Food Rescue API listening on port ${port}`));
 };
 

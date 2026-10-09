@@ -13,6 +13,29 @@ const participantQuery = `
   LIMIT 1`;
 
 module.exports = {
+  async listForUser(userId) {
+    const [rows] = await pool.execute(
+      `SELECT c.donation_id, d.food_name,
+              CASE WHEN c.donor_user_id = ?
+                THEN COALESCE(n.ngo_name, ngo_user.full_name)
+                ELSE COALESCE(donor.business_name, donor.full_name)
+              END AS other_party_name,
+              (SELECT m.body FROM donation_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_message,
+              (SELECT m.created_at FROM donation_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_message_at,
+              (SELECT COUNT(*) FROM donation_messages m WHERE m.conversation_id = c.id AND m.recipient_user_id = ? AND m.read_at IS NULL) AS unread_count
+       FROM donation_conversations c
+       JOIN donations d ON d.id = c.donation_id AND d.deleted_at IS NULL
+       JOIN users donor ON donor.id = c.donor_user_id
+       JOIN users ngo_user ON ngo_user.id = c.ngo_user_id
+       LEFT JOIN ngos n ON n.user_id = c.ngo_user_id
+       WHERE c.donor_user_id = ? OR c.ngo_user_id = ?
+       ORDER BY c.updated_at DESC, c.id DESC
+       LIMIT 100`,
+      [userId, userId, userId, userId]
+    );
+    return rows;
+  },
+
   async participant(donationId, userId, connection = pool) {
     const [rows] = await connection.execute(participantQuery, [donationId]);
     const chat = rows[0] || null;

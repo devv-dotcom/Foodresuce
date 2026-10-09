@@ -22,7 +22,18 @@ exports.login = async (req, res, next) => {
     }
 
     const admin = await Admin.findByEmail(configuredEmail);
-    if (!admin || admin.account_status !== 'active' || !(await bcrypt.compare(req.body.password, admin.password))) return res.status(401).json({ success: false, message: 'Invalid administrator email or password.' });
+    if (!admin) {
+      return res.status(503).json({ success: false, message: 'The configured administrator account is not provisioned. Configure ADMIN_EMAIL and ADMIN_PASSWORD, then run npm run admin:setup.' });
+    }
+    if (admin.account_status !== 'active') {
+      return res.status(403).json({ success: false, message: 'Your administrator account is inactive. Contact the platform owner.' });
+    }
+    if (!(await bcrypt.compare(req.body.password, admin.password))) {
+      return res.status(401).json({ success: false, message: 'Invalid administrator email or password.' });
+    }
+    if (!String(process.env.JWT_SECRET || '').trim()) {
+      return res.status(503).json({ success: false, message: 'Administrator sign-in is not configured. Set JWT_SECRET in the hosting environment and redeploy.' });
+    }
     await Admin.updateLastLogin(admin.admin_id);
     await ActivityLog.create({ actorUserId: admin.id, action: 'admin_login', entityType: 'admin', entityId: admin.admin_id, ipAddress: req.ip });
     const user = { id: admin.id, name: admin.full_name, email: admin.email, role: 'admin' };

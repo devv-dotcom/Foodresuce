@@ -2,6 +2,14 @@ const pool = require('../config/database');
 const DonationChat = require('../models/DonationChat');
 const { sendNotification } = require('../utils/notify');
 
+exports.listConversations = async (req, res, next) => {
+  try {
+    const conversations = await DonationChat.listForUser(req.user.id);
+    const unreadCount = conversations.reduce((total, conversation) => total + Number(conversation.unread_count || 0), 0);
+    return res.json({ success: true, conversations, unreadCount });
+  } catch (error) { next(error); }
+};
+
 const resolveChat = async (req, res) => {
   const participant = await DonationChat.participant(req.params.donationId, req.user.id);
   if (!participant) {
