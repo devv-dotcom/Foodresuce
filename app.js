@@ -23,6 +23,10 @@ const profileRoutes = require('./routes/profileRoutes');
 const impactRoutes = require('./routes/impactRoutes');
 const commonRoutes = require('./routes/commonRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const partnerRoutes = require('./routes/partnerRoutes');
+const pickupRoutes = require('./routes/pickupRoutes');
+const assignmentRoutes = require('./routes/assignmentRoutes');
+const volunteerRoutes = require('./routes/volunteerRoutes');
 const { runAutoMigration } = require('./database/autoMigrate');
 
 const app = express();
@@ -84,6 +88,10 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/impact', impactRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/partner', partnerRoutes);
+app.use('/api/pickups', pickupRoutes);
+app.use('/api/assignments', assignmentRoutes);
+app.use('/api/volunteer', volunteerRoutes);
 app.use('/api', commonRoutes);
 // Explicit HTML page routes – ensures every dashboard is served correctly
 // even if express.static has path-matching issues on some systems
@@ -91,7 +99,7 @@ const sendPage = (...parts) => (_req, res) => res.sendFile(path.join(__dirname, 
 // The former generic dashboard mixed receiver and NGO functionality.  Keep
 // old bookmarks safe, but route them through real sign-in and role routing.
 app.get('/dashboard.html',           (_req, res) => res.redirect(302, '/login.html'));
-app.get('/partner/dashboard.html',  (_req, res) => res.redirect(302, '/ngo/dashboard.html'));
+app.get('/partner/dashboard.html',  sendPage('partner', 'dashboard.html'));
 app.get('/business/dashboard.html', sendPage('business', 'dashboard.html'));
 app.get('/ngo/dashboard.html',      sendPage('ngo',       'dashboard.html'));
 app.get('/volunteer/dashboard.html', (_req, res) => res.redirect(302, '/login.html'));
@@ -134,8 +142,15 @@ app.use((error, _req, res, _next) => {
 
 const { seedAdminAccount } = require('./services/adminSeed');
 
-app.listen(port, () => {
-  console.log(`Food Rescue auth API listening on port ${port}`);
-  runAutoMigration().catch(err => console.warn('Auto migration notice:', err.message));
-  seedAdminAccount();
+const startServer = async () => {
+  // Apply additive schema updates before accepting traffic so handlers never
+  // race startup migrations on the first request after a deploy.
+  await runAutoMigration();
+  await seedAdminAccount();
+  app.listen(port, () => console.log(`Food Rescue API listening on port ${port}`));
+};
+
+startServer().catch(error => {
+  console.error('Food Rescue startup failed:', error.code || 'STARTUP_ERROR', error.message);
+  process.exitCode = 1;
 });
