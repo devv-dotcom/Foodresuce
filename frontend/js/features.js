@@ -90,14 +90,8 @@ export const initNotifications = async () => {
             }
             if (row.related_donation_id) {
               const userRole = getSession().user?.role;
-              const section = userRole === 'ngo' ? '#available-donations' : '#donation-history';
-              const target = document.querySelector(section);
-              if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                const donationAction = [...target.querySelectorAll('[data-id]')]
-                  .find(control => String(control.dataset.id) === String(row.related_donation_id));
-                donationAction?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }
+              const backPath = userRole === 'ngo' ? '/ngo/dashboard.html#active-rescues' : '/business/dashboard.html#donation-history';
+              window.location.assign(`/donation-details.html?id=${encodeURIComponent(row.related_donation_id)}&return=${encodeURIComponent(backPath)}`);
             }
           };
           item.addEventListener('click', markRead);

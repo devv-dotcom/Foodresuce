@@ -103,6 +103,7 @@ app.get('/ngo/dashboard.html',      sendPage('ngo',       'dashboard.html'));
 app.get('/volunteer/dashboard.html', (_req, res) => res.redirect(302, '/login.html'));
 app.get('/admin/dashboard.html',    sendPage('admin',     'dashboard.html'));
 app.get('/donate.html',             sendPage('donate.html'));
+app.get('/donation-details.html',   sendPage('donation-details.html'));
 app.get('/login.html',              sendPage('login.html'));
 app.get('/register.html',           sendPage('register.html'));
 app.get('/freshness.html',          sendPage('freshness.html'));

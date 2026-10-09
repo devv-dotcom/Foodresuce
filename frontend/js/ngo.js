@@ -12,6 +12,9 @@ export const initNgoIntegration = () => {
     try { const response = await request('/api/ngo/donations'); renderList($('#available-donations'), response.donations, pickupCard, 'No donations are currently available.'); }
     catch (error) { notifyError(error); }
   });
+  // The current NGO dashboard owns these actions in dashboard.js. Binding the
+  // legacy handler there as well submits accept/confirm requests twice.
+  if (document.body.matches('[data-dashboard="ngo"]')) return;
   document.addEventListener('click', async event => {
     const acceptBtn = event.target.closest('[data-action="accept-donation"]');
     if (acceptBtn) {

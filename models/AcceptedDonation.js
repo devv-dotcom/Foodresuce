@@ -15,9 +15,13 @@ module.exports = {
   async history(ngoId) {
     const [rows] = await pool.execute(
       `SELECT ad.id AS acceptance_id, ad.accepted_at, ad.status AS acceptance_status, d.*, c.name AS category_name,
-       u.business_name, u.city AS business_city
+       u.business_name, u.city AS business_city, pr.id AS pickup_id, pr.status AS pickup_status,
+       pr.pickup_date AS scheduled_pickup_date, pr.pickup_time AS scheduled_pickup_time,
+       pr.pickup_scheduled_at, pr.pickup_started_at, pr.food_collected_at,
+       pr.distribution_completed_at, pr.people_served, pr.distribution_location
        FROM accepted_donations ad JOIN donations d ON d.id = ad.donation_id
        JOIN food_categories c ON c.id = d.category_id JOIN users u ON u.id = d.business_user_id
+       LEFT JOIN pickup_requests pr ON pr.donation_id = d.id
        WHERE ad.ngo_id = ? ORDER BY ad.accepted_at DESC`,
       [ngoId]
     );

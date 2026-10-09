@@ -193,6 +193,9 @@
           <a href="#active-rescues" style="background:rgba(255,255,255,0.15); color:#fff; font-weight:800; font-size:14px; padding:10px 20px; border-radius:10px; text-decoration:none; border:1px solid rgba(255,255,255,0.25);">
             📦 View Active Rescues
           </a>
+          <a href="#rescue-history" style="background:rgba(255,255,255,0.15); color:#fff; font-weight:800; font-size:14px; padding:10px 20px; border-radius:10px; text-decoration:none; border:1px solid rgba(255,255,255,0.25);">
+            🕘 View Rescue History
+          </a>
           <button type="button" id="ngo-update-location" style="background:rgba(255,255,255,0.15); color:#fff; font-weight:800; font-size:14px; padding:10px 20px; border-radius:10px; border:1px solid rgba(255,255,255,0.25); cursor:pointer;">
             📍 Update location for nearby matching
           </button>
@@ -244,17 +247,23 @@
         </div>
       </section>
 
+      <section id="recommended-donations" style="margin-bottom:40px;">
+        <h2 style="margin:0; font-size:1.35rem; font-weight:800;">Recommended For You</h2>
+        <p style="margin:4px 0 16px; color:#64748b; font-size:14px;">Prioritized using expiry, distance, and recorded food-safety declarations.</p>
+        <div id="recommended-donations-list"><div class="notice">Finding suitable donations…</div></div>
+      </section>
+
       <section aria-labelledby="ngo-live-map-title" style="margin-bottom:40px;">
         <h2 id="ngo-live-map-title" style="font-size:1.35rem; font-weight:800;">Nearby Food Rescue Map</h2>
         <p id="ngo-map-status" role="status" style="color:#64748b;">Loading available donations near your location…</p>
         <div data-live-map style="height:360px; width:100%; border-radius:16px; overflow:hidden; border:1px solid #e2e8f0;"></div>
       </section>
 
-      <!-- Active Food Rescue Pipeline -->
+      <!-- Accepted donation history and active rescue tracking -->
       <section id="active-rescues" style="margin-bottom: 40px;">
         <div style="margin-bottom:16px;">
-          <h2 style="margin:0; font-size:1.35rem; font-weight:800;">Active Rescues &amp; Delivery Tracking</h2>
-          <p style="margin:4px 0 0; color:#64748b; font-size:14px;">Track accepted food, delivery arrival, and verify distribution completion.</p>
+          <h2 id="rescue-history" style="margin:0; font-size:1.35rem; font-weight:800;">Accepted Donations &amp; Rescue History</h2>
+          <p style="margin:4px 0 0; color:#64748b; font-size:14px;">Track accepted food, delivery arrival, and completed distributions.</p>
         </div>
 
         <div id="ngo-history">

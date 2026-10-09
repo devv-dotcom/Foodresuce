@@ -128,6 +128,14 @@ exports.getDonation = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'You do not have access to this donation.' });
     }
     donation.images = await Donation.getImages(donation.id);
+    const [pickupRows] = await pool.execute(
+      `SELECT id, pickup_date, pickup_time, delivery_time, status, pickup_scheduled_at,
+              pickup_started_at, food_collected_at, distribution_started_at, distribution_completed_at,
+              people_served, distribution_location, distribution_notes
+       FROM pickup_requests WHERE donation_id = ? LIMIT 1`,
+      [donation.id]
+    );
+    donation.pickup = pickupRows[0] || null;
     return res.json({ success: true, donation: enrichWithCountdown(donation) });
   } catch (error) { next(error); }
 };

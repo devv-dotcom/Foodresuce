@@ -5,7 +5,9 @@ const User = require('../models/User');
 const NGO = require('../models/NGO');
 const Donation = require('../models/Donation');
 const AcceptedDonation = require('../models/AcceptedDonation');
+const DeliveryProof = require('../models/DeliveryProof');
 const { sendNotification, awardPoints } = require('../utils/notify');
+const { getUrgency, scoreDonationForNgo, urgencyRank } = require('../services/rescueEngine');
 
 const tokenFor = user => jwt.sign({ sub: user.id, role: 'ngo' }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
@@ -34,6 +36,7 @@ const enrichWithCountdown = (d, userLat = null, userLon = null) => {
   return {
     ...d,
     distance_km: distanceKm,
+    ...getUrgency(d.expiry_time, now),
     hours_remaining: Number(diffHours.toFixed(1)),
     is_urgent: diffHours <= 2.5 && diffHours > 0,
     is_expired: diffMs <= 0,
@@ -124,24 +127,43 @@ exports.browseDonations = async (req, res, next) => {
       values.push(userLat, userLon, userLat, radiusKm);
     } else {
       const ngo = await NGO.findByUserId(req.user.id);
-      if (!ngo?.city) return res.json({ success: true, donations: [], locationRequired: true });
-      where += ' AND LOWER(COALESCE(d.pickup_city, u.city)) = LOWER(?)';
-      values.push(ngo.city.trim());
+      if (ngo?.city?.trim()) {
+        where += ' AND LOWER(COALESCE(d.pickup_city, u.city)) = LOWER(?)';
+        values.push(ngo.city.trim());
+      }
+      // A missing NGO city or GPS location should reduce ranking precision,
+      // not hide every valid donation. Keep the feed usable until the NGO
+      // completes its location profile; distance remains unknown in this case.
     }
 
     const donations = await Donation.list({ where, values, limit: req.query.limit || 50, offset: req.query.offset || 0 });
-    let mapped = donations.map(d => enrichWithCountdown(d, userLat, userLon));
+    let mapped = donations.map(d => {
+      const enriched = enrichWithCountdown(d, userLat, userLon);
+      const match = scoreDonationForNgo(enriched, { distanceKm: enriched.distance_km, radiusKm });
+      return { ...enriched, ...match };
+    });
 
-    // Sort: urgent first, then distance or date
+    // Emergency alerts lead; then urgency, match score, distance, and expiry.
     mapped.sort((a, b) => {
-      if (a.is_urgent && !b.is_urgent) return -1;
-      if (!a.is_urgent && b.is_urgent) return 1;
+      if (Boolean(a.is_emergency) !== Boolean(b.is_emergency)) return a.is_emergency ? -1 : 1;
+      const urgencyDiff = (urgencyRank[a.urgency] ?? 5) - (urgencyRank[b.urgency] ?? 5);
+      if (urgencyDiff) return urgencyDiff;
+      if (a.score !== b.score) return b.score - a.score;
       if (a.distance_km !== null && b.distance_km !== null) return a.distance_km - b.distance_km;
       return new Date(a.expiry_time) - new Date(b.expiry_time);
     });
 
-    return res.json({ success: true, donations: mapped, locationRequired: userLat === null });
+    return res.json({ success: true, donations: mapped, locationRequired: userLat === null, locationMessage: userLat === null ? 'Add your location to prioritize nearby donations.' : null });
   } catch (error) { next(error); }
+};
+
+exports.recommendedDonations = async (req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = payload => originalJson({
+    ...payload,
+    donations: (payload.donations || []).filter(donation => donation.recommended)
+  });
+  return exports.browseDonations(req, res, next);
 };
 
 exports.acceptDonation = async (req, res, next) => {
@@ -157,9 +179,6 @@ exports.acceptDonation = async (req, res, next) => {
     const [dRows] = await connection.execute('SELECT business_user_id, food_name, quantity FROM donations WHERE id = ?', [req.params.id]);
     const dInfo = dRows[0];
 
-    // Award 50 points to NGO for accepting
-    await awardPoints(req.user.id, 50, connection);
-
     // Notify donor
     if (dInfo) {
       await sendNotification({
@@ -173,7 +192,7 @@ exports.acceptDonation = async (req, res, next) => {
     }
 
     await connection.commit();
-    return res.json({ success: true, message: 'Donation accepted successfully! Points awarded.' });
+    return res.json({ success: true, message: 'Donation accepted successfully. Schedule its pickup from your accepted donations.' });
   } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
 };
 
@@ -186,47 +205,137 @@ exports.history = async (req, res, next) => {
 };
 
 exports.confirmDelivery = async (req, res, next) => {
+  return res.status(409).json({ success: false, message: 'Record pickup, food collection, and distribution before completing this donation.' });
+};
+
+const findNgoPickupForUpdate = async (connection, donationId, ngoId) => {
+  const [rows] = await connection.execute(
+    `SELECT pr.*, d.business_user_id, d.food_name, d.quantity, d.number_of_meals, d.expiry_time,
+            d.status AS donation_status
+     FROM pickup_requests pr JOIN donations d ON d.id = pr.donation_id
+     WHERE pr.donation_id = ? AND pr.ngo_id = ? LIMIT 1 FOR UPDATE`,
+    [donationId, ngoId]
+  );
+  return rows[0] || null;
+};
+
+const donorEvent = (pickup, title, message, connection, notificationType) => sendNotification({
+  recipientUserId: pickup.business_user_id,
+  notificationType,
+  donationId: Number(pickup.donation_id),
+  title,
+  message,
+  connection
+});
+
+exports.schedulePickup = async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
-    const ngo = await NGO.findByUserId(req.user.id);
-    if (!ngo) return res.status(404).json({ success: false, message: 'NGO not found.' });
+    const date = String(req.body.pickupDate || '');
+    const time = String(req.body.pickupTime || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+      return res.status(422).json({ success: false, message: 'Choose a valid pickup date and time.' });
+    }
+    const scheduledAt = new Date(`${date}T${time}:00`);
+    if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt <= new Date()) return res.status(422).json({ success: false, message: 'Pickup time must be in the future.' });
     await connection.beginTransaction();
-    const [result] = await connection.execute(
-      `UPDATE donations d
-       JOIN accepted_donations ad ON ad.donation_id = d.id
-       SET d.status = 'completed', ad.status = 'completed'
-       WHERE d.id = ? AND ad.ngo_id = ? AND d.status IN ('delivered', 'picked_up', 'accepted')`,
-      [req.params.id, ngo.id]
-    );
-    if (result.affectedRows === 0) {
-      await connection.rollback();
-      return res.status(400).json({ success: false, message: 'Donation delivery cannot be confirmed at this stage or does not belong to your NGO.' });
-    }
-    const [donationRows] = await connection.execute(
-      'SELECT business_user_id, food_name, number_of_meals FROM donations WHERE id = ?',
-      [req.params.id]
-    );
-    const donation = donationRows[0];
-
-    // Award completion points:
-    // NGO: 100 points
-    await awardPoints(req.user.id, 100, connection);
-    if (donation) {
-      // Donor: 50 completion bonus points
-      await awardPoints(donation.business_user_id, 50, connection);
-
-      // Notify donor
-      await sendNotification({
-        recipientUserId: donation.business_user_id,
-        notificationType: 'donation_completed',
-        donationId: Number(req.params.id),
-        title: '🎉 Rescue Completed & Certificate Ready!',
-        message: `Your donation "${donation.food_name}" was safely distributed to beneficiaries! You earned 50 impact points and your digital certificate is ready in your dashboard.`,
-        connection
-      });
-    }
-
+    const ngo = await NGO.findByUserId(req.user.id);
+    const pickup = ngo && await findNgoPickupForUpdate(connection, req.params.id, ngo.id);
+    if (!pickup) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Accepted donation was not found for this NGO.' }); }
+    if (!['pending', 'pickup_scheduled'].includes(pickup.status)) { await connection.rollback(); return res.status(409).json({ success: false, message: 'Pickup can only be scheduled before it starts.' }); }
+    if (scheduledAt >= new Date(pickup.expiry_time)) { await connection.rollback(); return res.status(422).json({ success: false, message: 'Pickup must be scheduled before the food expires.' }); }
+    await connection.execute("UPDATE pickup_requests SET pickup_date = ?, pickup_time = ?, pickup_scheduled_at = NOW(), status = 'pickup_scheduled' WHERE id = ?", [date, time, pickup.id]);
+    await connection.execute("UPDATE donations SET status = 'pickup_scheduled' WHERE id = ?", [pickup.donation_id]);
+    await connection.execute("UPDATE accepted_donations SET status = 'pickup_scheduled' WHERE donation_id = ? AND ngo_id = ?", [pickup.donation_id, ngo.id]);
+    await donorEvent(pickup, 'Pickup scheduled', `The NGO scheduled pickup for ${date} at ${time}.`, connection, 'pickup_scheduled');
     await connection.commit();
-    return res.json({ success: true, message: 'Delivery confirmed successfully! Donation marked as completed and impact points credited.' });
+    return res.json({ success: true, message: 'Pickup scheduled.', pickup: { date, time, status: 'pickup_scheduled' } });
+  } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
+};
+
+exports.startPickup = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const ngo = await NGO.findByUserId(req.user.id);
+    const pickup = ngo && await findNgoPickupForUpdate(connection, req.params.id, ngo.id);
+    if (!pickup) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Accepted donation was not found for this NGO.' }); }
+    if (pickup.status !== 'pickup_scheduled') { await connection.rollback(); return res.status(409).json({ success: false, message: 'Schedule the pickup before starting it.' }); }
+    await connection.execute("UPDATE pickup_requests SET status = 'pickup_started', pickup_started_at = NOW() WHERE id = ?", [pickup.id]);
+    await connection.execute("UPDATE donations SET status = 'pickup_started' WHERE id = ?", [pickup.donation_id]);
+    await connection.execute("UPDATE accepted_donations SET status = 'pickup_started' WHERE donation_id = ? AND ngo_id = ?", [pickup.donation_id, ngo.id]);
+    await donorEvent(pickup, 'Pickup started', 'The NGO has started traveling to collect your food donation.', connection, 'pickup_started');
+    await connection.commit();
+    return res.json({ success: true, message: 'Pickup started.', status: 'pickup_started' });
+  } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
+};
+
+exports.collectFood = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const ngo = await NGO.findByUserId(req.user.id);
+    const pickup = ngo && await findNgoPickupForUpdate(connection, req.params.id, ngo.id);
+    if (!pickup) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Accepted donation was not found for this NGO.' }); }
+    if (pickup.status !== 'pickup_started') { await connection.rollback(); return res.status(409).json({ success: false, message: 'Food can only be marked collected after pickup starts.' }); }
+    await connection.execute("UPDATE pickup_requests SET status = 'food_collected', food_collected_at = NOW() WHERE id = ?", [pickup.id]);
+    await connection.execute("UPDATE donations SET status = 'food_collected' WHERE id = ?", [pickup.donation_id]);
+    await connection.execute("UPDATE accepted_donations SET status = 'food_collected' WHERE donation_id = ? AND ngo_id = ?", [pickup.donation_id, ngo.id]);
+    await donorEvent(pickup, 'Food collected', 'The NGO confirmed collection of your food donation.', connection, 'food_collected');
+    await connection.commit();
+    return res.json({ success: true, message: 'Food collection confirmed.', status: 'food_collected' });
+  } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
+};
+
+exports.recordDistribution = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    const peopleServed = Number(req.body.peopleServed);
+    const location = String(req.body.distributionLocation || '').trim();
+    const notes = String(req.body.distributionNotes || '').trim();
+    const distributedAt = new Date(req.body.distributionDateTime);
+    if (!req.file) return res.status(422).json({ success: false, message: 'Upload a distribution proof photo.' });
+    if (!Number.isInteger(peopleServed) || peopleServed < 1 || peopleServed > 1000000) return res.status(422).json({ success: false, message: 'Enter the actual number of people served.' });
+    if (!location || location.length > 255) return res.status(422).json({ success: false, message: 'Enter a distribution location no longer than 255 characters.' });
+    if (!Number.isFinite(distributedAt.getTime()) || distributedAt > new Date()) return res.status(422).json({ success: false, message: 'Enter a valid distribution date and time.' });
+    if (notes.length > 1000) return res.status(422).json({ success: false, message: 'Distribution notes must be 1000 characters or fewer.' });
+    await connection.beginTransaction();
+    const ngo = await NGO.findByUserId(req.user.id);
+    const pickup = ngo && await findNgoPickupForUpdate(connection, req.params.id, ngo.id);
+    if (!pickup) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Accepted donation was not found for this NGO.' }); }
+    if (pickup.status !== 'food_collected') { await connection.rollback(); return res.status(409).json({ success: false, message: 'Distribution can only be recorded after food is collected.' }); }
+    const proofPath = `/${path.relative(path.join(__dirname, '..'), req.file.path).split(path.sep).join('/')}`;
+    await DeliveryProof.upsert(connection, pickup.id, proofPath, notes);
+    await connection.execute(
+      "UPDATE pickup_requests SET status = 'delivered', distribution_started_at = ?, distribution_completed_at = ?, people_served = ?, distribution_location = ?, distribution_notes = ? WHERE id = ?",
+      [distributedAt, distributedAt, peopleServed, location, notes || null, pickup.id]
+    );
+    await connection.execute("UPDATE donations SET status = 'delivered' WHERE id = ?", [pickup.donation_id]);
+    await connection.execute("UPDATE accepted_donations SET status = 'delivered' WHERE donation_id = ? AND ngo_id = ?", [pickup.donation_id, ngo.id]);
+    await donorEvent(pickup, 'Distribution recorded', `The NGO recorded distribution to ${peopleServed} people at ${location}.`, connection, 'distribution_recorded');
+    await connection.commit();
+    return res.json({ success: true, message: 'Distribution recorded with proof.', status: 'delivered' });
+  } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
+};
+
+exports.completeRescue = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const ngo = await NGO.findByUserId(req.user.id);
+    const pickup = ngo && await findNgoPickupForUpdate(connection, req.params.id, ngo.id);
+    if (!pickup) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Accepted donation was not found for this NGO.' }); }
+    if (pickup.status !== 'delivered' || !pickup.people_served || !await DeliveryProof.exists(pickup.id, connection)) {
+      await connection.rollback();
+      return res.status(409).json({ success: false, message: 'Record distribution details and proof before completing the rescue.' });
+    }
+    await connection.execute("UPDATE pickup_requests SET status = 'completed' WHERE id = ? AND status = 'delivered'", [pickup.id]);
+    await connection.execute("UPDATE donations SET status = 'completed' WHERE id = ? AND status = 'delivered'", [pickup.donation_id]);
+    await connection.execute("UPDATE accepted_donations SET status = 'completed' WHERE donation_id = ? AND ngo_id = ? AND status = 'delivered'", [pickup.donation_id, ngo.id]);
+    await awardPoints(req.user.id, 100, connection);
+    await awardPoints(pickup.business_user_id, 50, connection);
+    await donorEvent(pickup, 'Food rescue completed', `The donation was distributed to ${pickup.people_served} people. Your donation certificate is now available.`, connection, 'donation_completed');
+    await connection.commit();
+    return res.json({ success: true, message: 'Rescue completed. Impact points recorded.' });
   } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
 };
