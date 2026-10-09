@@ -46,8 +46,19 @@ const Donation = {
 
   async list({ where = '', values = [], limit = 20, offset = 0, includeDeleted = false }) {
     const combinedWhere = includeDeleted ? where : (where ? `${where} AND d.deleted_at IS NULL` : 'WHERE d.deleted_at IS NULL');
+    // TiDB rejects prepared-statement placeholders in LIMIT/OFFSET. Embed
+    // only validated integers while keeping all filter values parameterized.
+    const requestedLimit = Number(limit);
+    const requestedOffset = Number(offset);
+    const safeLimit = Number.isSafeInteger(requestedLimit) && requestedLimit > 0
+      ? Math.min(requestedLimit, 500)
+      : 20;
+    const safeOffset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0
+      ? requestedOffset
+      : 0;
+    const pageSql = `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
     try {
-      const [rows] = await pool.execute(`${selectDonation} ${combinedWhere} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`, [...values, Number(limit), Number(offset)]);
+      const [rows] = await pool.execute(`${selectDonation} ${combinedWhere} ORDER BY d.created_at DESC ${pageSql}`, values);
       return rows;
     } catch (error) {
       // Some production databases predate the soft-delete migration. A
@@ -59,12 +70,11 @@ const Donation = {
         .replace(/\s+AND\s+d\.deleted_at\s*=\s*NULL/i, '')
         .replace(/\s+AND\s+d\.deleted_at\s+IS\s+NULL/i, '')
         .replace(/^WHERE\s+d\.deleted_at\s+IS\s+NULL\s*$/i, '');
-      const [rows] = await pool.execute(`${selectDonation} ${legacyWhere} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`, [...values, Number(limit), Number(offset)]);
+      const [rows] = await pool.execute(`${selectDonation} ${legacyWhere} ORDER BY d.created_at DESC ${pageSql}`, values);
       console.warn('[Donations] Serving legacy schema while deleted_at migration is pending.');
       return rows;
     }
   },
-
   async update(id, businessUserId, data) {
     const [result] = await pool.execute(
       `UPDATE donations SET category_id = ?, food_name = ?, food_type = ?, quantity = ?, number_of_meals = ?,
