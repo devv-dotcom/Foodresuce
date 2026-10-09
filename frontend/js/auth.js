@@ -8,6 +8,7 @@ const roleCanOpen = (role, path) => {
   const normalizedRole = String(role || '').toLowerCase();
   if (path === '/donate.html' || path === '/business/dashboard.html') return BUSINESS_ROLES.includes(normalizedRole);
   if (path === '/ngo/dashboard.html') return normalizedRole === 'ngo';
+  if (path === '/donation-details.html') return BUSINESS_ROLES.includes(normalizedRole) || normalizedRole === 'ngo' || normalizedRole === 'admin';
   if (path === '/admin/dashboard.html') return normalizedRole === 'admin';
   return false;
 };
@@ -155,6 +156,10 @@ export const protectRoute = () => {
       return false;
     }
     if (requiredRole === 'admin' && user?.role !== 'admin') {
+      location.replace(userDashboard);
+      return false;
+    }
+    if (requiredRole === 'donation-participant' && !isBusinessRole && !isNgoRole && user?.role !== 'admin') {
       location.replace(userDashboard);
       return false;
     }

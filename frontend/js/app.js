@@ -18,6 +18,7 @@ import {
 } from './features.js';
 import { initFreshnessPredictor } from './freshness.js';
 import { initDonationChat } from './chat.js';
+import { initDonationDetails } from './donation-details.js';
 
 const boot = async () => {
   if (!protectRoute()) return;
@@ -31,6 +32,7 @@ const boot = async () => {
   initPdfReports();
   initFreshnessPredictor();
   initDonationChat();
+  initDonationDetails();
   initExpiryCountdowns();
   initEmergencyBanner();
 

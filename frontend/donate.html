@@ -722,8 +722,13 @@
         if (!previewGrid) return;
         previewGrid.innerHTML = '';
         const summaryThumbBox = document.getElementById('summary-thumb-box');
+        const selectedFiles = Array.from(files || []);
+        if (!selectedFiles.length && summaryThumbBox) {
+          summaryThumbBox.innerHTML = '<i data-lucide="image"></i>';
+          if (window.lucide) window.lucide.createIcons();
+        }
 
-        Array.from(files).forEach((file, index) => {
+        selectedFiles.forEach((file, index) => {
           if (!file.type.startsWith('image/')) return;
           const reader = new FileReader();
           reader.onload = e => {
@@ -736,12 +741,12 @@
 
             thumb.querySelector('.donor-thumb-remove').addEventListener('click', () => {
               if (confirm('Are you sure you want to remove this photo?')) {
-                thumb.remove();
+                const remaining = Array.from(fileInput.files || []).filter(selected => selected !== file);
+                const transfer = new DataTransfer();
+                remaining.forEach(selected => transfer.items.add(selected));
+                fileInput.files = transfer.files;
+                renderPreviews(fileInput.files);
                 toast('Photo removed.', 'warning');
-                if (previewGrid.children.length === 0 && summaryThumbBox) {
-                  summaryThumbBox.innerHTML = '<i data-lucide="image"></i>';
-                  if (window.lucide) window.lucide.createIcons();
-                }
               }
             });
 

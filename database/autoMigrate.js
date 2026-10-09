@@ -45,6 +45,13 @@ async function runAutoMigration() {
       }
 
       // 2. Donations table additions
+      // The full admin-module SQL adds these fields, but Render startup only
+      // runs this additive migration. Donation feeds and category validation
+      // query both columns, so ensure older databases receive them here too.
+      await ensureColumn('donations', 'deleted_at', 'DATETIME NULL AFTER updated_at');
+      await ensureIndex('donations', 'idx_donations_deleted_status', 'KEY idx_donations_deleted_status (deleted_at, status)');
+      await ensureColumn('food_categories', 'is_active', 'BOOLEAN NOT NULL DEFAULT TRUE AFTER name');
+      await ensureColumn('food_categories', 'updated_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
       if (!(await helperCheckColumn('donations', 'is_emergency'))) {
         await connection.query(`ALTER TABLE donations ADD COLUMN is_emergency BOOLEAN NOT NULL DEFAULT FALSE AFTER status`);
         console.log('[MIGRATION] Added donations.is_emergency');
@@ -58,6 +65,19 @@ async function runAutoMigration() {
       await ensureColumn('donations', 'safety_storage_confirmed', 'BOOLEAN NOT NULL DEFAULT FALSE');
       await ensureColumn('donations', 'safety_deadline_confirmed', 'BOOLEAN NOT NULL DEFAULT FALSE');
       await ensureColumn('donations', 'safety_accuracy_confirmed', 'BOOLEAN NOT NULL DEFAULT FALSE');
+
+      // NGO-led pickup/distribution reuses the existing pickup and proof tables.
+      await ensureColumn('pickup_requests', 'pickup_scheduled_at', 'DATETIME NULL');
+      await ensureColumn('pickup_requests', 'pickup_started_at', 'DATETIME NULL');
+      await ensureColumn('pickup_requests', 'food_collected_at', 'DATETIME NULL');
+      await ensureColumn('pickup_requests', 'distribution_started_at', 'DATETIME NULL');
+      await ensureColumn('pickup_requests', 'distribution_completed_at', 'DATETIME NULL');
+      await ensureColumn('pickup_requests', 'people_served', 'INT UNSIGNED NULL');
+      await ensureColumn('pickup_requests', 'distribution_location', 'VARCHAR(255) NULL');
+      await ensureColumn('pickup_requests', 'distribution_notes', 'VARCHAR(1000) NULL');
+      await connection.query("ALTER TABLE pickup_requests MODIFY COLUMN status ENUM('pending', 'pickup_scheduled', 'volunteer_assigned', 'pickup_started', 'food_collected', 'on_the_way', 'delivered', 'completed', 'cancelled') NOT NULL DEFAULT 'pending'");
+      await connection.query("ALTER TABLE donations MODIFY COLUMN status ENUM('available', 'accepted', 'pickup_scheduled', 'pickup_started', 'volunteer_assigned', 'picked_up', 'food_collected', 'distributed', 'delivered', 'completed', 'cancelled') NOT NULL DEFAULT 'available'");
+      await connection.query("ALTER TABLE accepted_donations MODIFY COLUMN status ENUM('accepted', 'pickup_scheduled', 'pickup_started', 'volunteer_assigned', 'picked_up', 'food_collected', 'distributed', 'delivered', 'completed', 'cancelled') NOT NULL DEFAULT 'accepted'");
 
       // Handoff codes are retained for the assigned partner to share with the
       // donor and recipient. Verification still stores only their hashes.

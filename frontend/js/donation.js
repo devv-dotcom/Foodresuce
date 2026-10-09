@@ -5,6 +5,11 @@ const donationItem = donation => {
   const row = document.createElement('article');
   row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border:1px solid #e2e8f0; border-radius:12px; background:#fff; margin-bottom:10px; font-size:14px;';
   row.innerHTML = `<div><strong style="display:block; color:#1e293b;">${escapeHtml(donation.food_name || donation.foodName || 'Food Item')}</strong><span style="font-size:12px; color:#64748b;">${escapeHtml(donation.status || 'available')} · ${escapeHtml(donation.quantity || '')}</span></div>`;
+  const details = document.createElement('a');
+  details.href = `/donation-details.html?id=${encodeURIComponent(donation.id)}&return=${encodeURIComponent('/business/dashboard.html#donation-history')}`;
+  details.className = 'btn-smart-sm';
+  details.textContent = 'View Details';
+  row.append(details);
   
   if (donation.status === 'available' || !donation.status) {
     const edit = document.createElement('button');

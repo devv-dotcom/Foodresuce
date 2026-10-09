@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Donation details and rescue status timeline." />
+    <title>Donation Details · Food Rescue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="dashboard.css" />
+    <link rel="stylesheet" href="features.css" />
+    <link rel="stylesheet" href="css/accessibility.css" />
+    <style>
+      .detail-shell { max-width: 1000px; margin: 36px auto; padding: 0 24px 56px; }
+      .detail-card { background:#fff; border:1px solid #e2e8f0; border-radius:18px; padding:24px; box-shadow:0 8px 28px rgba(15,23,42,.06); }
+      .detail-top { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+      .detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+      .detail-image { width:100%; max-height:360px; object-fit:cover; border-radius:14px; background:#f1f5f9; }
+      .detail-timeline { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:10px; margin-top:16px; }
+      .detail-stage { border:1px solid #e2e8f0; border-radius:12px; padding:12px; color:#64748b; font-size:.86rem; }
+      .detail-stage.done { border-color:#86efac; background:#f0fdf4; color:#166534; }
+      .detail-error { color:#9f1239; background:#fff1f2; border:1px solid #fecdd3; padding:16px; border-radius:12px; }
+      @media(max-width:600px) { .detail-shell { margin:20px auto; padding:0 14px 36px; } .detail-card { padding:17px; } }
+    </style>
+  </head>
+  <body data-required-role="donation-participant" data-donation-details>
+    <header class="ngo-navbar">
+      <a class="ngo-brand" href="/index.html"><span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#f59e0b;color:#14532d;font-weight:900;">FR</span> Food Rescue</a>
+      <button type="button" data-action="logout" class="donor-btn-secondary">Sign Out</button>
+    </header>
+    <main class="detail-shell">
+      <div class="detail-top"><a id="detail-back" class="btn-smart-sm" href="/ngo/dashboard.html">← Back</a><span id="detail-status" class="status-pill">Loading…</span></div>
+      <section id="detail-content" class="detail-card" aria-live="polite"><p>Loading donation details…</p></section>
+    </main>
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
