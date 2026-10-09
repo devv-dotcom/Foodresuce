@@ -55,7 +55,12 @@ exports.registerNGO = async (req, res, next) => {
     await NGO.create(connection, userResult.insertId, req.body);
     await connection.commit();
     const user = { id: userResult.insertId, full_name: req.body.fullName, email: req.body.email, role: 'ngo' };
-    return res.status(201).json({ success: true, message: 'NGO registration received. An administrator must approve it before sign-in.', user: { id: user.id, name: user.full_name, role: user.role } });
+    return res.status(201).json({
+      success: true,
+      message: 'NGO registration successful. Your account is active.',
+      token: tokenFor(user),
+      user: { id: user.id, name: user.full_name, role: user.role }
+    });
   } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
 };
 
@@ -64,7 +69,7 @@ exports.loginNGO = async (req, res, next) => {
     const user = await User.findByEmail(req.body.email);
     if (!user || user.role !== 'ngo' || !(await bcrypt.compare(req.body.password, user.password))) return res.status(401).json({ success: false, message: 'Invalid NGO email or password.' });
     const ngo = await NGO.findByUserId(user.id);
-    if (!ngo || ngo.account_status !== 'active') return res.status(403).json({ success: false, message: ngo?.account_status === 'pending' ? 'Your NGO application is awaiting administrator approval.' : 'Your NGO account is not active.' });
+    if (!ngo || ['rejected', 'suspended'].includes(ngo.account_status)) return res.status(403).json({ success: false, message: 'Your NGO account is not active.' });
     return res.json({ success: true, message: 'Login successful.', token: tokenFor(user), user: { id: user.id, name: user.full_name, role: user.role } });
   } catch (error) { next(error); }
 };

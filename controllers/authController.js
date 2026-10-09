@@ -117,12 +117,9 @@ exports.register = async (req, res, next) => {
 
     await connection.commit();
     const user = await User.findPublicById(userId);
-    if (role === 'ngo') {
-      return res.status(201).json({ success: true, message: 'NGO registration received. An administrator must approve it before sign-in.', user: serializeUser(user) });
-    }
     const token = signAccessToken(user);
 
-    return res.status(201).json({ success: true, message: 'Registration successful! Welcome to Food Rescue.', token, user: serializeUser(user) });
+    return res.status(201).json({ success: true, message: 'Registration successful! Your account is active.', token, user: serializeUser(user) });
   } catch (error) {
     await connection.rollback();
     next(error);
@@ -151,7 +148,6 @@ exports.login = async (req, res, next) => {
       if (status === 'suspended') return res.status(403).json({ success: false, message: 'Your business account has been suspended.' });
     } else if (user.role === 'ngo') {
       const [rows] = await pool.execute('SELECT account_status FROM ngos WHERE user_id = ? LIMIT 1', [user.id]);
-      if (rows[0] && rows[0].account_status === 'pending') return res.status(403).json({ success: false, message: 'Your NGO application is awaiting administrator approval.' });
       if (rows[0] && rows[0].account_status === 'rejected') return res.status(403).json({ success: false, message: 'Your NGO application was rejected.' });
       if (rows[0] && rows[0].account_status === 'suspended') return res.status(403).json({ success: false, message: 'Your NGO account has been suspended.' });
     }

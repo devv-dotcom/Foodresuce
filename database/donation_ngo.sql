@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS ngos (
   user_id BIGINT UNSIGNED NOT NULL,
   ngo_name VARCHAR(160) NOT NULL,
   registration_number VARCHAR(100) NULL,
-  account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'pending',
+  account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'active',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

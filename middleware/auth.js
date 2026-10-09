@@ -34,8 +34,13 @@ const requireActiveAccount = async (req, res, next) => {
     if (req.user?.role === 'admin') sql = 'SELECT account_status FROM admins WHERE user_id = ? LIMIT 1';
     if (!sql) return next();
     const [rows] = await pool.execute(sql, [req.user.id]);
-    // Accounts created by older modules may not yet have their optional profile row.
-    if (rows[0] && rows[0].account_status !== 'active') return res.status(403).json({ success: false, message: 'Your account is not active. Please contact an administrator.' });
+    // NGO and donor/business registrations are active without administrator approval.
+    // Keep suspension and rejection effective; other account types still require active status.
+    const status = rows[0]?.account_status;
+    const selfActivatedRole = req.user?.role === 'ngo' || BUSINESS_ROLES.includes(req.user?.role);
+    if (status && (selfActivatedRole ? ['rejected', 'suspended'].includes(status) : status !== 'active')) {
+      return res.status(403).json({ success: false, message: 'Your account is not active. Please contact an administrator.' });
+    }
     next();
   } catch (error) { next(error); }
 };

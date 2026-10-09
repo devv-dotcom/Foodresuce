@@ -111,13 +111,6 @@ export const initAuth = () => {
     try {
       setLoading(submit, true, 'Creating account…');
       const response = await register(details, registerEndpoint(details.role));
-      // NGO applications require administrator approval before they can log in.
-      // The API intentionally returns no token for a pending application.
-      if (!response.token) {
-        toast(response.message || 'Your application was submitted for review. You can sign in after approval.');
-        form.reset();
-        return;
-      }
       saveSession(response); toast('Registration successful.'); location.assign(postAuthTarget(response.user));
     } catch (error) { notifyError(error); } finally { setLoading(submit, false); }
   });

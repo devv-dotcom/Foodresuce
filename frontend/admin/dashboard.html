@@ -59,7 +59,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M6 11h4M6 15h4M14 11h4M14 15h4M9 3h6v4H9z"/></svg>
         </span>
         NGOs / Receivers
-        <span class="nav-badge alert-count" id="sidebar-pending-ngo-badge">3</span>
+        <span class="nav-badge alert-count" id="sidebar-pending-ngo-badge" style="display:none">0</span>
       </a>
 
       <a href="#donors" class="nav-item" data-tab="donors">
@@ -244,7 +244,7 @@
             <div>
               <div class="kpi-number" id="kpi-registered-ngos">428</div>
               <div class="kpi-label">Registered NGOs</div>
-              <div class="kpi-subtext">3 pending verification review</div>
+              <div class="kpi-subtext">Partners can join and donate immediately</div>
             </div>
           </div>
 
@@ -273,18 +273,6 @@
               <div class="kpi-subtext">Successful rescue missions</div>
             </div>
           </div>
-        </div>
-
-        <!-- Pending NGO Verification Banner -->
-        <div class="pending-alert-banner" id="pending-ngo-banner">
-          <div class="alert-banner-left">
-            <div class="alert-banner-icon">⚠️</div>
-            <div class="alert-banner-text">
-              <h4>3 NGO Verification Requests Pending Approval</h4>
-              <p>Organization credentials & food safety documents submitted for verification.</p>
-            </div>
-          </div>
-          <button type="button" class="btn-alert-action" id="btn-review-ngos">Review Requests &rarr;</button>
         </div>
 
         <!-- Grid: Operational Overview (Donations Table + Activity Log) -->
@@ -435,33 +423,9 @@
           <div class="panel-header">
             <div class="panel-title-wrap">
               <h3>NGO & Receiver Management</h3>
-              <p>Verify organizations, monitor claim histories, and manage partner accounts</p>
+              <p>Monitor claim histories and manage active partner accounts</p>
             </div>
             <button type="button" class="btn-secondary" id="btn-export-ngos">Export NGO Directory</button>
-          </div>
-
-          <!-- Pending Verifications Section -->
-          <div style="margin-bottom: 28px;">
-            <h4 style="font-size:0.95rem; font-weight:800; color:#ea580c; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-              <span>⚠️</span> Pending Verification Requests (<span id="pending-ngo-count">3</span>)
-            </h4>
-            <div class="table-responsive" style="border-color:#ffedd5;">
-              <table class="admin-data-table">
-                <thead>
-                  <tr style="background:#fff7ed;">
-                    <th>Organization</th>
-                    <th>Contact Person</th>
-                    <th>Location</th>
-                    <th>Tax ID / Reg #</th>
-                    <th>Submitted Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="pending-ngo-table-body">
-                  <!-- Injected pending NGO rows -->
-                </tbody>
-              </table>
-            </div>
           </div>
 
           <!-- Verified NGO Directory -->
@@ -473,9 +437,8 @@
               </div>
 
               <select class="select-filter" id="ngo-status-filter">
-                <option value="all">All Verification Statuses</option>
-                <option value="verified">Verified Only</option>
-                <option value="pending">Pending Only</option>
+                <option value="all">All Account Statuses</option>
+                <option value="active">Active Only</option>
                 <option value="suspended">Suspended Only</option>
               </select>
             </div>
@@ -725,9 +688,9 @@
               <div class="qa-icon-circle">🍲</div>
               <strong>Add Donation</strong>
             </div>
-            <div class="quick-action-card" id="qa-verify-ngo">
+            <div class="quick-action-card" id="qa-manage-ngos">
               <div class="qa-icon-circle" style="background:#eff6ff; color:#2563eb;">🏢</div>
-              <strong>Verify NGO</strong>
+              <strong>Manage NGOs</strong>
             </div>
             <div class="quick-action-card" id="qa-manage-users">
               <div class="qa-icon-circle" style="background:#fefce8; color:#a16207;">👥</div>

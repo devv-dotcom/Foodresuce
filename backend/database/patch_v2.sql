@@ -36,6 +36,14 @@ PREPARE alterIfNotExists2 FROM @preparedStatement2;
 EXECUTE alterIfNotExists2;
 DEALLOCATE PREPARE alterIfNotExists2;
 
--- Ensure business_profiles account_status has pending by default for new registrations
+-- New donor/business accounts are active on registration.
 ALTER TABLE business_profiles
-  MODIFY account_status ENUM('active', 'suspended', 'pending', 'rejected') NOT NULL DEFAULT 'pending';
+  MODIFY account_status ENUM('active', 'suspended', 'pending', 'rejected') NOT NULL DEFAULT 'active';
+
+UPDATE business_profiles SET account_status = 'active' WHERE account_status <> 'active';
+
+-- Existing NGO accounts are active without administrator approval.
+ALTER TABLE ngos
+  MODIFY account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'active';
+
+UPDATE ngos SET account_status = 'active' WHERE account_status <> 'active';
