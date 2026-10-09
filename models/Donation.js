@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const normalizeCoordinate = value => value === '' || value === undefined || value === null ? null : Number(value);
 
 const selectDonation = `
   SELECT d.*, c.name AS category_name, u.business_name, u.full_name AS owner_name, u.mobile AS donor_mobile, u.city AS business_city,
@@ -28,7 +29,7 @@ const Donation = {
         data.safetyFreshness === true || data.safetyFreshness === 'true' || data.safetyFreshness === 'on',
         data.safetyPackaging === true || data.safetyPackaging === 'true' || data.safetyPackaging === 'on',
         data.safetyAccuracy === true || data.safetyAccuracy === 'true' || data.safetyAccuracy === 'on',
-        data.latitude || null, data.longitude || null, data.description || null]
+        normalizeCoordinate(data.latitude), normalizeCoordinate(data.longitude), data.description || null]
     );
     return result.insertId;
   },
@@ -63,7 +64,7 @@ const Donation = {
         data.safetyFreshness === true || data.safetyFreshness === 'true' || data.safetyFreshness === 'on',
         data.safetyPackaging === true || data.safetyPackaging === 'true' || data.safetyPackaging === 'on',
         data.safetyAccuracy === true || data.safetyAccuracy === 'true' || data.safetyAccuracy === 'on',
-        data.latitude || null, data.longitude || null, data.description || null, id, businessUserId]
+        normalizeCoordinate(data.latitude), normalizeCoordinate(data.longitude), data.description || null, id, businessUserId]
     );
     if (result.affectedRows) return result.affectedRows;
     // MySQL can report zero changed rows when an available listing is saved

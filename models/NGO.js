@@ -1,5 +1,7 @@
 const pool = require('../config/database');
 const geoService = require('../services/geoService');
+const normalizeCity = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  .split(',')[0].trim().toLocaleLowerCase().replace(/\s+/g, ' ');
 
 module.exports = {
   async findByUserId(userId) {
@@ -80,25 +82,41 @@ module.exports = {
     return nearbyList.slice(0, limit);
   },
 
-  // Exact-coordinate matching for donation alerts. Approximate city centroids
-  // are not used to decide who receives a pickup notification.
-  async findNearbyNGOsByCoordinates({ latitude, longitude, radiusKm = Number(process.env.NGO_MATCH_RADIUS_KM) || 35, connection = pool }) {
-    if (latitude === null || latitude === undefined || latitude === '' || longitude === null || longitude === undefined || longitude === '') return [];
-    const donorLat = Number(latitude);
-    const donorLng = Number(longitude);
+  // Prefer exact coordinates, with an exact city-name fallback when either
+  // side has no usable GPS. City matches carry no invented distance value.
+  async findNearbyNGOsByCoordinates({ latitude, longitude, city, pincode, radiusKm = Number(process.env.NGO_MATCH_RADIUS_KM) || 35, connection = pool }) {
+    const hasLatitude = latitude !== null && latitude !== undefined && latitude !== '';
+    const hasLongitude = longitude !== null && longitude !== undefined && longitude !== '';
+    const donorLat = hasLatitude ? Number(latitude) : null;
+    const donorLng = hasLongitude ? Number(longitude) : null;
     const radius = Math.min(Math.max(Number(radiusKm) || 35, 1), 250);
-    if (!Number.isFinite(donorLat) || donorLat < -90 || donorLat > 90 || !Number.isFinite(donorLng) || donorLng < -180 || donorLng > 180) return [];
+    const hasCoordinates = Number.isFinite(donorLat) && donorLat >= -90 && donorLat <= 90
+      && Number.isFinite(donorLng) && donorLng >= -180 && donorLng <= 180;
+    const donorCity = String(city || '').trim();
+    const donorPincode = String(pincode || '').replace(/\D/g, '');
+    if (!hasCoordinates && !donorCity && !donorPincode) return [];
 
     const [rows] = await connection.execute(
-      `SELECT n.id AS ngo_id, u.id AS user_id, n.ngo_name, u.latitude, u.longitude
+      `SELECT n.id AS ngo_id, u.id AS user_id, n.ngo_name, u.city, u.pincode, u.latitude, u.longitude
        FROM ngos n JOIN users u ON u.id = n.user_id
-       WHERE n.account_status = 'active' AND u.role = 'ngo'
-         AND u.latitude IS NOT NULL AND u.longitude IS NOT NULL`
+       WHERE n.account_status = 'active' AND u.role = 'ngo'`
     );
-    return rows.map(row => ({
-      ...row,
-      distance_km: geoService.calculateDistance(donorLat, donorLng, row.latitude, row.longitude)
-    })).filter(row => row.distance_km !== null && row.distance_km <= radius)
-      .sort((a, b) => a.distance_km - b.distance_km);
+    return rows.map(row => {
+      const distanceKm = hasCoordinates
+        ? geoService.calculateDistance(donorLat, donorLng, row.latitude, row.longitude)
+        : null;
+      const sameCity = Boolean(donorCity && normalizeCity(donorCity) === normalizeCity(row.city));
+      const ngoPincode = String(row.pincode || '').replace(/\D/g, '');
+      const samePincode = Boolean(donorPincode && ngoPincode && donorPincode === ngoPincode);
+      return { ...row, distance_km: distanceKm, same_city: sameCity, same_pincode: samePincode };
+    }).filter(row => (row.distance_km !== null && row.distance_km <= radius) || row.same_city || row.same_pincode)
+      .sort((a, b) => {
+        const aHasDistance = Number.isFinite(a.distance_km);
+        const bHasDistance = Number.isFinite(b.distance_km);
+        if (aHasDistance && bHasDistance) return a.distance_km - b.distance_km;
+        if (aHasDistance !== bHasDistance) return aHasDistance ? -1 : 1;
+        if (a.same_pincode !== b.same_pincode) return a.same_pincode ? -1 : 1;
+        return 0;
+      });
   }
 };
