@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="../dashboard.css" />
     <link rel="stylesheet" href="../features.css" />
     <link rel="stylesheet" href="../css/accessibility.css" />
+    <link rel="stylesheet" href="../css/ngo-dashboard.css" />
     <style>
       body {
         margin: 0;
@@ -160,6 +161,14 @@
       </div>
     </header>
 
+    <nav class="ngo-quick-nav" aria-label="NGO dashboard sections">
+      <a href="#overview">Overview</a>
+      <a href="#available-donations">Find food</a>
+      <a href="#active-rescues">My rescues</a>
+      <a href="#ngo-live-map-title">Nearby map</a>
+      <a href="#rescue-history">Rescue history</a>
+    </nav>
+
     <!-- Notification Drawer -->
     <div class="notification-drawer" data-notification-drawer>
       <header class="notification-drawer-header">
@@ -181,10 +190,11 @@
       <div id="emergency-alert-banner" class="emergency-banner" hidden style="margin-top:24px;"></div>
 
       <!-- Welcome Hero -->
-      <section class="ngo-hero">
-        <div class="ngo-hero-badge">🛡️ Verified NGO Partner</div>
-        <h1>Welcome back, <span data-api-value="fullName">Partner</span> 👋</h1>
+      <section class="ngo-hero" id="overview">
+        <div class="ngo-hero-badge">🛡️ Active NGO Partner</div>
+        <div class="ngo-welcome-line"><div><h1>Welcome back, <span data-api-value="fullName">Partner</span> 👋</h1>
         <p>Connect available surplus food with shelters, community kitchens, and people who need good meals most.</p>
+        </div><span class="ngo-verification" data-ngo-verification>NGO partner</span></div>
 
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
           <a href="#available-donations" style="background:#f59e0b; color:#14532d; font-weight:800; font-size:14px; padding:10px 20px; border-radius:10px; text-decoration:none;">
@@ -203,12 +213,17 @@
         </div>
       </section>
 
-      <!-- 4 Stat Metric Cards -->
+      <!-- Live NGO operation metrics -->
       <section class="ngo-grid-4" aria-label="NGO metrics">
         <div class="ngo-stat-card">
           <div class="icon" style="background:#fefce8; color:#ca8a04;">🍱</div>
           <div class="val" id="count-ngo-available">0</div>
           <div class="label">Available Donations</div>
+        </div>
+        <div class="ngo-stat-card">
+          <div class="icon" style="background:#fff7ed; color:#c2410c;">⏱</div>
+          <div class="val" id="count-ngo-pending">0</div>
+          <div class="label">Pending pickups</div>
         </div>
 
         <div class="ngo-stat-card">
@@ -242,6 +257,15 @@
           </button>
         </div>
 
+        <div class="ngo-feed-tools" role="search" aria-label="Filter available food">
+          <label class="ngo-search-field">Search food or pickup area<input id="ngo-food-search" type="search" placeholder="Try ‘rice’ or ‘Peddapuram’" autocomplete="off"></label>
+          <label>Food category<select id="ngo-food-category"><option value="">All categories</option></select></label>
+          <label>Distance<select id="ngo-food-distance"><option value="all">Any distance</option><option value="10">Within 10 km</option><option value="25">Within 25 km</option><option value="50">Within 50 km</option></select></label>
+          <label>Sort by<select id="ngo-food-sort"><option value="recommended">Recommended</option><option value="nearest">Nearest first</option><option value="urgent">Expiring soon</option></select></label>
+          <label class="ngo-urgent-filter"><input id="ngo-food-urgent" type="checkbox"> Urgent only</label>
+        </div>
+        <p id="ngo-feed-summary" class="ngo-feed-summary" aria-live="polite"></p>
+
         <div id="available-donations-list">
           <div class="notice">Scanning for surplus food donations in your radius…</div>
         </div>
@@ -262,9 +286,16 @@
       <!-- Accepted donation history and active rescue tracking -->
       <section id="active-rescues" style="margin-bottom: 40px;">
         <div style="margin-bottom:16px;">
-          <h2 id="rescue-history" style="margin:0; font-size:1.35rem; font-weight:800;">Accepted Donations &amp; Rescue History</h2>
-          <p style="margin:4px 0 0; color:#64748b; font-size:14px;">Track accepted food, delivery arrival, and completed distributions.</p>
+          <h2 id="rescue-history" style="margin:0; font-size:1.35rem; font-weight:800;">My Rescues</h2>
+          <p style="margin:4px 0 0; color:#64748b; font-size:14px;">Schedule pickups, record distribution, and review completed collections.</p>
         </div>
+
+        <div class="ngo-history-tools" role="group" aria-label="Filter rescue history">
+          <button type="button" class="ngo-history-filter is-active" data-history-filter="all" aria-pressed="true">All rescues</button>
+          <button type="button" class="ngo-history-filter" data-history-filter="active" aria-pressed="false">In progress</button>
+          <button type="button" class="ngo-history-filter" data-history-filter="completed" aria-pressed="false">Completed</button>
+        </div>
+        <p id="ngo-history-summary" class="ngo-feed-summary" aria-live="polite"></p>
 
         <div id="ngo-history">
           <div class="notice">Checking for active deliveries…</div>

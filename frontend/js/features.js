@@ -216,21 +216,10 @@ export const initLiveOperationsMap = async () => {
       let latitude = hasSavedCoordinates ? Number(profile.latitude) : Number.NaN;
       let longitude = hasSavedCoordinates ? Number(profile.longitude) : Number.NaN;
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
-        if (!navigator.geolocation) {
-          if (status) status.textContent = 'Set your NGO location to see nearby donations on the map.';
-          return;
-        }
-        const coords = await new Promise(resolve => navigator.geolocation.getCurrentPosition(
-          position => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-          () => resolve(null), { timeout: 8000 }
-        ));
-        if (!coords) {
-          if (status) status.textContent = 'Location was not shared. Use “Update location for nearby matching” to set it later.';
-          return;
-        }
-        ({ latitude, longitude } = coords);
+        if (status) status.textContent = 'Save your NGO location to see map results that match your food list. Use “Update location for nearby matching” above.';
+        return;
       }
-      const params = new URLSearchParams({ latitude, longitude, limit: '100' });
+      const params = new URLSearchParams({ latitude, longitude, limit: '50' });
       const response = await request(`/api/ngo/donations?${params}`);
       mapData = { donations: response.donations || [], ngos: [] };
     } else {
@@ -246,6 +235,7 @@ export const initLiveOperationsMap = async () => {
       }).addTo(map);
 
       const markers = [];
+      const donationLayers = [];
 
       // 1. Donations (Red if urgent, Yellow/Orange if available)
       (mapData.donations || []).forEach(d => {
@@ -263,8 +253,11 @@ export const initLiveOperationsMap = async () => {
           opacity: 1,
           fillOpacity: 0.85
         }).addTo(map);
+        donationLayers.push({ id: String(d.id), layer: circle });
 
-        const detailsUrl = ngoMap ? '#available-donations' : '/admin/dashboard.html#donations';
+        const detailsUrl = ngoMap
+          ? `/donation-details.html?id=${encodeURIComponent(d.id)}&return=${encodeURIComponent('/ngo/dashboard.html#available-donations')}`
+          : '/admin/dashboard.html#donations';
         circle.bindPopup(`
           <b>${label}</b><br>
           <strong>${escapeHtml(d.food_name)}</strong><br>
@@ -300,6 +293,18 @@ export const initLiveOperationsMap = async () => {
       const status = $('#ngo-map-status');
       if (ngoMap && status) status.textContent = markers.length ? `${markers.length} available donation(s) shown. The map refreshes with the dashboard.` : 'No available donations with map coordinates were found nearby.';
       setTimeout(() => map.invalidateSize(), 300);
+      if (ngoMap) {
+        const syncVisibleDonations = event => {
+          const visibleIds = new Set((event?.detail?.ids || window.__ngoVisibleDonationIds || []).map(String));
+          donationLayers.forEach(({ id, layer }) => {
+            const shouldShow = visibleIds.has(id);
+            if (shouldShow && !map.hasLayer(layer)) layer.addTo(map);
+            if (!shouldShow && map.hasLayer(layer)) map.removeLayer(layer);
+          });
+        };
+        window.addEventListener('ngo:donation-filters-changed', syncVisibleDonations);
+        syncVisibleDonations();
+      }
       map.on('popupopen', event => {
         const link = event.popup.getElement()?.querySelector('[data-map-donation]');
         if (!link || !ngoMap) return;
