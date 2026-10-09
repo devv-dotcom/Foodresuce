@@ -20,10 +20,10 @@ router.get('/assignments/:id', controller.getAssignmentById);
 
 router.post('/assignments/:id/start', controller.startNavigation);
 router.post('/assignments/:id/arrive', controller.arrivePickup);
-router.post('/assignments/:id/verify-pickup', controller.verifyPickupOtp);
+router.post('/assignments/:id/verify-pickup', controller.verifyPickupCode);
 router.post('/assignments/:id/start-delivery', controller.startDelivery);
 router.post('/assignments/:id/arrive-destination', controller.arriveDestination);
-router.post('/assignments/:id/verify-delivery', controller.verifyDeliveryOtp);
+router.post('/assignments/:id/verify-delivery', controller.verifyDeliveryCode);
 router.post('/assignments/:id/proof', uploadProofPhoto, controller.uploadProof);
 router.post('/assignments/:id/complete', controller.completeAssignment);
 router.post('/assignments/:id/cancel', controller.cancelAssignment);

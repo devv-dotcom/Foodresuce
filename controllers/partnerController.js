@@ -1,10 +1,59 @@
-const crypto = require('crypto');
 const pool = require('../config/database');
 const Donation = require('../models/Donation');
 const geoService = require('../services/geoService');
 const notifStore = require('../services/notifications');
+const { createHandoffCode, hashHandoffCode, isValidHandoffCode } = require('../utils/handoffCode');
 
-const otpHash = otp => crypto.createHash('sha256').update(otp).digest('hex');
+async function createUniqueHandoffCode(connection, reservedHashes = []) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const code = createHandoffCode();
+    const hash = hashHandoffCode(code);
+    if (reservedHashes.includes(hash)) continue;
+    const [matches] = await connection.execute(
+      'SELECT id FROM assignments WHERE pickup_otp_hash = ? OR delivery_otp_hash = ? LIMIT 1',
+      [hash, hash]
+    );
+    if (!matches.length) return { code, hash };
+  }
+  throw new Error('Could not generate a unique handoff code. Please retry.');
+}
+
+async function ensureHandoffCodes(userId, row) {
+  if (['COMPLETED', 'CANCELLED', 'DELIVERED', 'DISTRIBUTED'].includes(String(row.status || '').toUpperCase())) return row;
+  if (row.pickup_code && row.delivery_code && row.pickup_otp_hash && row.delivery_otp_hash) return row;
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(
+      'SELECT id, status, pickup_code, delivery_code, pickup_otp_hash, delivery_otp_hash FROM assignments WHERE id = ? AND member_id = ? FOR UPDATE',
+      [row.id, userId]
+    );
+    if (!rows.length) { await connection.rollback(); return row; }
+    const current = rows[0];
+    if (['COMPLETED', 'CANCELLED', 'DELIVERED', 'DISTRIBUTED'].includes(String(current.status || '').toUpperCase())) {
+      await connection.rollback();
+      return row;
+    }
+    let pickup = current.pickup_code ? { code: current.pickup_code, hash: current.pickup_otp_hash } : null;
+    let delivery = current.delivery_code ? { code: current.delivery_code, hash: current.delivery_otp_hash } : null;
+    if (!pickup || !pickup.hash) pickup = await createUniqueHandoffCode(connection);
+    if (!delivery || !delivery.hash) delivery = await createUniqueHandoffCode(connection, [pickup.hash]);
+    await connection.execute(
+      'UPDATE assignments SET pickup_code = ?, delivery_code = ?, pickup_otp_hash = ?, delivery_otp_hash = ? WHERE id = ?',
+      [pickup.code, delivery.code, pickup.hash, delivery.hash, row.id]
+    );
+    await connection.commit();
+    return { ...row, pickup_code: pickup.code, delivery_code: delivery.code };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
+}
+
+const withoutCodeHashes = row => {
+  const { pickup_otp_hash, delivery_otp_hash, ...safe } = row;
+  return safe;
+};
 
 const ownedAssignment = async (connection, assignmentId, userId, lock = false) => {
   const [rows] = await connection.execute(
@@ -260,7 +309,7 @@ exports.getDonationById = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// POST /api/partner/donations/:id/accept (ATOMIC TRANSACTION & OTP GENERATION)
+// POST /api/partner/donations/:id/accept (ATOMIC TRANSACTION & HANDOFF CODE GENERATION)
 exports.acceptDonation = async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
@@ -292,15 +341,17 @@ exports.acceptDonation = async (req, res, next) => {
       [donationId]
     );
 
-    // Generate 6-digit OTPs
-    const pickupOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    const deliveryOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate independent, unique-to-this-system handoff codes. Only hashes
+    // are used for verification; the assigned partner receives the codes to
+    // share with the donor and recipient.
+    const pickupCode = await createUniqueHandoffCode(connection);
+    const deliveryCode = await createUniqueHandoffCode(connection, [pickupCode.hash]);
 
     // Create assignment row
     const [asgResult] = await connection.execute(
-      `INSERT INTO assignments (donation_id, member_id, assigned_by, status, pickup_otp_hash, delivery_otp_hash)
-       VALUES (?, ?, ?, 'ASSIGNED', ?, ?)`,
-      [donationId, partnerId, partnerId, otpHash(pickupOtp), otpHash(deliveryOtp)]
+      `INSERT INTO assignments (donation_id, member_id, assigned_by, status, pickup_otp_hash, delivery_otp_hash, pickup_code, delivery_code)
+       VALUES (?, ?, ?, 'ASSIGNED', ?, ?, ?, ?)`,
+      [donationId, partnerId, partnerId, pickupCode.hash, deliveryCode.hash, pickupCode.code, deliveryCode.code]
     );
 
     await connection.commit();
@@ -322,7 +373,9 @@ exports.acceptDonation = async (req, res, next) => {
         id: asgResult.insertId,
         donationId,
         status: 'ASSIGNED',
-        pickupAddress: donation.pickup_address
+        pickupAddress: donation.pickup_address,
+        pickupCode: pickupCode.code,
+        deliveryCode: deliveryCode.code
       }
     });
   } catch (error) {
@@ -348,7 +401,8 @@ exports.getAssignments = async (req, res, next) => {
       [userId]
     );
 
-    return res.json({ success: true, assignments: rows, count: rows.length });
+    const assignments = await Promise.all(rows.map(row => ensureHandoffCodes(userId, row)));
+    return res.json({ success: true, assignments: assignments.map(withoutCodeHashes), count: assignments.length });
   } catch (error) { next(error); }
 };
 
@@ -366,7 +420,8 @@ exports.getAssignmentById = async (req, res, next) => {
     );
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Assignment not found.' });
-    return res.json({ success: true, assignment: rows[0] });
+    const assignment = await ensureHandoffCodes(req.user.id, rows[0]);
+    return res.json({ success: true, assignment: withoutCodeHashes(assignment) });
   } catch (error) { next(error); }
 };
 
@@ -377,23 +432,24 @@ exports.startNavigation = (req, res, next) => transition(req, res, next, {
 
 // POST /api/partner/assignments/:id/arrive
 exports.arrivePickup = (req, res, next) => transition(req, res, next, {
-  from: ['GOING_TO_PICKUP'], to: 'ARRIVED_AT_PICKUP', message: 'Arrived at donor location. Ask donor for Pickup OTP.',
+  from: ['GOING_TO_PICKUP'], to: 'ARRIVED_AT_PICKUP', message: 'Arrived at donor location. Confirm the pickup handoff code.',
   extraSql: 'arrived_at_pickup_at = CURRENT_TIMESTAMP,'
 });
 
-// POST /api/partner/assignments/:id/verify-pickup (PICKUP OTP VERIFICATION)
-exports.verifyPickupOtp = async (req, res, next) => {
+// POST /api/partner/assignments/:id/verify-pickup (PICKUP HANDOFF CODE)
+exports.verifyPickupCode = async (req, res, next) => {
   try {
-    const { otp } = req.body;
-    if (!otp) return res.status(422).json({ success: false, message: 'Pickup OTP is required.' });
+    const code = String(req.body.code || req.body.otp || '').trim().toUpperCase();
+    if (!isValidHandoffCode(code)) return res.status(422).json({ success: false, message: 'Enter the 8-character pickup handoff code.' });
 
     const assignment = await ownedAssignment(pool, req.params.id, req.user.id);
     if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found.' });
-    if (assignment.status !== 'ARRIVED_AT_PICKUP') return res.status(409).json({ success: false, message: 'Arrive at the pickup location before verifying its OTP.' });
+    if (assignment.status !== 'ARRIVED_AT_PICKUP') return res.status(409).json({ success: false, message: 'Arrive at the pickup location before confirming the handoff code.' });
+    await ensureHandoffCodes(req.user.id, assignment);
     const [otpRows] = await pool.execute('SELECT pickup_otp_hash FROM assignments WHERE id = ? LIMIT 1', [req.params.id]);
     const pickupOtpHash = otpRows[0]?.pickup_otp_hash;
-    if (pickupOtpHash && otpHash(otp.trim()) !== pickupOtpHash) {
-      return res.status(400).json({ success: false, message: '❌ Invalid Pickup OTP verification code. Please check with donor.' });
+    if (!pickupOtpHash || hashHandoffCode(code) !== pickupOtpHash) {
+      return res.status(400).json({ success: false, message: 'Invalid pickup handoff code. Confirm it with the donor.' });
     }
 
     await pool.execute(
@@ -401,7 +457,7 @@ exports.verifyPickupOtp = async (req, res, next) => {
       [req.params.id]
     );
 
-    return res.json({ success: true, message: '✓ Pickup OTP verified! Food collected successfully.', status: 'FOOD_COLLECTED' });
+    return res.json({ success: true, message: 'Pickup handoff code confirmed. Food collected successfully.', status: 'FOOD_COLLECTED' });
   } catch (error) { next(error); }
 };
 
@@ -412,22 +468,23 @@ exports.startDelivery = (req, res, next) => transition(req, res, next, {
 
 // POST /api/partner/assignments/:id/arrive-destination
 exports.arriveDestination = (req, res, next) => transition(req, res, next, {
-  from: ['IN_TRANSIT'], to: 'ARRIVED_AT_DESTINATION', message: 'Arrived at delivery destination. Ask receiver for Delivery OTP.',
+  from: ['IN_TRANSIT'], to: 'ARRIVED_AT_DESTINATION', message: 'Arrived at destination. Confirm the delivery handoff code.',
   extraSql: 'arrived_at_destination_at = CURRENT_TIMESTAMP,'
 });
 
-// POST /api/partner/assignments/:id/verify-delivery (DELIVERY OTP VERIFICATION)
-exports.verifyDeliveryOtp = async (req, res, next) => {
+// POST /api/partner/assignments/:id/verify-delivery (DELIVERY HANDOFF CODE)
+exports.verifyDeliveryCode = async (req, res, next) => {
   try {
-    const { otp } = req.body;
-    if (!otp) return res.status(422).json({ success: false, message: 'Delivery OTP is required.' });
+    const code = String(req.body.code || req.body.otp || '').trim().toUpperCase();
+    if (!isValidHandoffCode(code)) return res.status(422).json({ success: false, message: 'Enter the 8-character delivery handoff code.' });
 
     const assignment = await ownedAssignment(pool, req.params.id, req.user.id);
     if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found.' });
-    if (assignment.status !== 'ARRIVED_AT_DESTINATION') return res.status(409).json({ success: false, message: 'Arrive at the delivery destination before verifying its OTP.' });
+    if (assignment.status !== 'ARRIVED_AT_DESTINATION') return res.status(409).json({ success: false, message: 'Arrive at the delivery destination before confirming the handoff code.' });
+    await ensureHandoffCodes(req.user.id, assignment);
     const [otpRows] = await pool.execute('SELECT delivery_otp_hash FROM assignments WHERE id = ? LIMIT 1', [req.params.id]);
-    if (otpRows[0]?.delivery_otp_hash && otpHash(otp.trim()) !== otpRows[0].delivery_otp_hash) {
-      return res.status(400).json({ success: false, message: '❌ Invalid Delivery OTP code. Please check with recipient.' });
+    if (!otpRows[0]?.delivery_otp_hash || hashHandoffCode(code) !== otpRows[0].delivery_otp_hash) {
+      return res.status(400).json({ success: false, message: 'Invalid delivery handoff code. Confirm it with the recipient.' });
     }
 
     await pool.execute(
@@ -439,7 +496,7 @@ exports.verifyDeliveryOtp = async (req, res, next) => {
       await pool.execute(`UPDATE donations SET status = 'delivered' WHERE id = ? AND status = 'accepted'`, [assignment.donation_id]);
     }
 
-    return res.json({ success: true, message: '✓ Delivery OTP verified! Food handed over to recipient.', status: 'DELIVERED' });
+    return res.json({ success: true, message: 'Delivery handoff code confirmed. Food handed over successfully.', status: 'DELIVERED' });
   } catch (error) { next(error); }
 };
 

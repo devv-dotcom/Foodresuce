@@ -4,7 +4,7 @@ async function runAutoMigration() {
   try {
     const connection = await pool.getConnection();
     try {
-      const dbName = process.env.DB_NAME || 'foodbridge';
+      const dbName = process.env.TIDB_DATABASE || process.env.DB_NAME || 'foodbridge';
 
       const helperCheckColumn = async (table, column) => {
         const [rows] = await connection.query(
@@ -12,6 +12,12 @@ async function runAutoMigration() {
           [dbName, table, column]
         );
         return rows[0].cnt > 0;
+      };
+      const ensureColumn = async (table, column, definition) => {
+        if (!(await helperCheckColumn(table, column))) {
+          await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+          console.log(`[MIGRATION] Added ${table}.${column}`);
+        }
       };
 
       // 1. Users table additions
@@ -32,6 +38,26 @@ async function runAutoMigration() {
       if (!(await helperCheckColumn('donations', 'is_emergency'))) {
         await connection.query(`ALTER TABLE donations ADD COLUMN is_emergency BOOLEAN NOT NULL DEFAULT FALSE AFTER status`);
         console.log('[MIGRATION] Added donations.is_emergency');
+      }
+      // Additive donation fields retain existing rows and capture pickup and
+      // donor-reported handling details for newly created/edited listings.
+      await ensureColumn('donations', 'pickup_city', 'VARCHAR(100) NULL');
+      await ensureColumn('donations', 'pickup_pincode', 'VARCHAR(12) NULL');
+      await ensureColumn('donations', 'storage_condition', "VARCHAR(20) NOT NULL DEFAULT 'ambient'");
+      await ensureColumn('donations', 'safety_hygiene_confirmed', 'BOOLEAN NOT NULL DEFAULT FALSE');
+      await ensureColumn('donations', 'safety_storage_confirmed', 'BOOLEAN NOT NULL DEFAULT FALSE');
+      await ensureColumn('donations', 'safety_deadline_confirmed', 'BOOLEAN NOT NULL DEFAULT FALSE');
+      await ensureColumn('donations', 'safety_accuracy_confirmed', 'BOOLEAN NOT NULL DEFAULT FALSE');
+
+      // Handoff codes are retained for the assigned partner to share with the
+      // donor and recipient. Verification still stores only their hashes.
+      const [assignmentTableRows] = await connection.query(
+        'SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
+        [dbName, 'assignments']
+      );
+      if (assignmentTableRows[0].cnt > 0) {
+        await ensureColumn('assignments', 'pickup_code', 'VARCHAR(8) NULL');
+        await ensureColumn('assignments', 'delivery_code', 'VARCHAR(8) NULL');
       }
 
       // 3. Pickup Requests additions for live tracking

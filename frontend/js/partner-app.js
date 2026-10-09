@@ -9,13 +9,13 @@ let partnerState = {
   assignments: [],
   selectedDonation: null,
   activeAssignment: null,
-  pendingOtpContext: null, // { type: 'pickup' | 'delivery', assignmentId: string }
+  pendingHandoffContext: null, // { type: 'pickup' | 'delivery', assignmentId: string }
   impact: null
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
   initNavigation();
-  initOtpInputs();
+  initHandoffCodeInput();
   initProofForm();
   initProfileForm();
 
@@ -314,10 +314,10 @@ function getWorkflowActionLabel(status) {
   switch (status) {
     case 'ASSIGNED': return 'Start Navigation 🚗';
     case 'GOING_TO_PICKUP': return "I've Arrived at Donor 🏪";
-    case 'ARRIVED_AT_PICKUP': return 'Verify Pickup OTP 🔑';
+    case 'ARRIVED_AT_PICKUP': return 'Confirm Pickup Code';
     case 'FOOD_COLLECTED': return 'Start Delivery Transport 🚚';
     case 'IN_TRANSIT': return "I've Arrived at Destination 🏛️";
-    case 'ARRIVED_AT_DESTINATION': return 'Verify Delivery OTP 🔑';
+    case 'ARRIVED_AT_DESTINATION': return 'Confirm Delivery Code';
     case 'DELIVERED': return 'Upload Delivery Proof 📷';
     case 'COMPLETED': return 'Mission Completed ✓';
     default: return 'Progress Workflow';
@@ -330,18 +330,18 @@ window.advancePartnerWorkflow = async (id, currentStatus) => {
     toast('Navigation started! En route to donor location.');
   } else if (currentStatus === 'GOING_TO_PICKUP') {
     await request(`/api/partner/assignments/${id}/arrive`, { method: 'POST' });
-    toast('Arrived at donor! Ask donor for Pickup OTP.');
+    toast('Arrived at donor. Share the pickup handoff code.');
   } else if (currentStatus === 'ARRIVED_AT_PICKUP') {
-    openOtpVerificationModal('pickup', id);
+    openHandoffCodeModal('pickup', id);
     return;
   } else if (currentStatus === 'FOOD_COLLECTED') {
     await request(`/api/partner/assignments/${id}/start-delivery`, { method: 'POST' });
     toast('Delivery transport started! En route to recipient.');
   } else if (currentStatus === 'IN_TRANSIT') {
     await request(`/api/partner/assignments/${id}/arrive-destination`, { method: 'POST' });
-    toast('Arrived at delivery location! Ask recipient for Delivery OTP.');
+    toast('Arrived at delivery location. Share the delivery handoff code.');
   } else if (currentStatus === 'ARRIVED_AT_DESTINATION') {
-    openOtpVerificationModal('delivery', id);
+    openHandoffCodeModal('delivery', id);
     return;
   } else if (currentStatus === 'DELIVERED') {
     openProofUploadModal(id);
@@ -360,64 +360,54 @@ window.cancelMissionRisk = async (id) => {
 };
 
 /* ============================================================
-   4. OTP VERIFICATION DIALOGS & HANDLERS
+   4. HANDOFF CODE CONFIRMATION
    ============================================================ */
-function openOtpVerificationModal(type, assignmentId) {
-  partnerState.pendingOtpContext = { type, assignmentId };
-  const modal = $('#modal-otp-verification');
-  const title = $('#otp-modal-title');
-  const desc = $('#otp-modal-description');
+function openHandoffCodeModal(type, assignmentId) {
+  partnerState.pendingHandoffContext = { type, assignmentId };
+  const modal = $('#modal-handoff-code');
+  const title = $('#handoff-code-title');
+  const desc = $('#handoff-code-hint');
 
   if (modal && title && desc) {
-    title.textContent = type === 'pickup' ? 'Enter Pickup Verification OTP' : 'Enter Delivery Verification OTP';
-    desc.textContent = type === 'pickup' 
-      ? 'Enter the 6-digit OTP code provided by the donor at the pickup location.' 
-      : 'Enter the 6-digit OTP code provided by the recipient at the delivery location.';
-    
-    // Clear boxes
-    $$('.otp-box').forEach(b => b.value = '');
+    title.textContent = type === 'pickup' ? 'Confirm Pickup Code' : 'Confirm Delivery Code';
+    desc.textContent = type === 'pickup'
+      ? 'Ask the donor to provide the 8-character pickup handoff code.'
+      : 'Ask the recipient to provide the 8-character delivery handoff code.';
+    const input = $('#handoff-code-input');
+    if (input) input.value = '';
     modal.classList.add('show');
-    $('#otp-1')?.focus();
+    input?.focus();
   }
 }
 
-function initOtpInputs() {
-  const boxes = $$('.otp-box');
-  boxes.forEach((box, idx) => {
-    box.addEventListener('input', (e) => {
-      if (box.value && idx < boxes.length - 1) {
-        boxes[idx + 1].focus();
-      }
-    });
-    box.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !box.value && idx > 0) {
-        boxes[idx - 1].focus();
-      }
-    });
+function initHandoffCodeInput() {
+  const input = $('#handoff-code-input');
+  input?.addEventListener('input', () => {
+    input.value = input.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 8);
   });
 
-  $('#btn-submit-otp-verification')?.addEventListener('click', async () => {
-    const otp = Array.from(boxes).map(b => b.value).join('');
-    if (otp.length < 6) {
-      toast('Please enter the full 6-digit OTP code.', 'error');
+  $('#btn-verify-code')?.addEventListener('click', async () => {
+    const code = (input?.value || '').trim().toUpperCase();
+    if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) {
+      toast('Enter the full 8-character handoff code.', 'error');
       return;
     }
 
-    const ctx = partnerState.pendingOtpContext;
+    const ctx = partnerState.pendingHandoffContext;
     if (!ctx) return;
 
     try {
       const endpoint = ctx.type === 'pickup' ? 'verify-pickup' : 'verify-delivery';
       const res = await request(`/api/partner/assignments/${ctx.assignmentId}/${endpoint}`, {
         method: 'POST',
-        body: { otp }
+        body: { code }
       });
 
-      toast(res.message || 'OTP verified successfully!');
-      $('#modal-otp-verification')?.classList.remove('show');
+      toast(res.message || 'Handoff code confirmed.');
+      $('#modal-handoff-code')?.classList.remove('show');
       await loadAssignments();
     } catch (err) {
-      toast(err.message || 'OTP verification failed. Check code and try again.', 'error');
+      toast(err.message || 'Handoff code could not be confirmed.', 'error');
     }
   });
 }

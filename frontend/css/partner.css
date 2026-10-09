@@ -1067,6 +1067,21 @@ input, select, textarea { font: inherit; }
 }
 .p-otp-box:focus { border-color: var(--g-600); background: white; box-shadow: 0 0 0 4px rgba(22,101,52,.14); }
 .p-otp-box.filled { border-color: var(--g-600); background: var(--g-50); }
+.p-handoff-code-input {
+  width: 100%;
+  min-height: 58px;
+  border: 2px solid #d1d5db;
+  border-radius: 12px;
+  background: #fff;
+  color: #14532d;
+  font: 800 1.35rem 'DM Mono', monospace;
+  letter-spacing: .18em;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 10px 14px;
+  outline: none;
+}
+.p-handoff-code-input:focus { border-color: var(--g-600); box-shadow: 0 0 0 4px rgba(22,101,52,.14); }
 
 /* ── SUCCESS ANIMATION MODAL ────────────────────────────────── */
 .p-success-screen { text-align: center; padding: 36px 20px; }

@@ -634,31 +634,24 @@
   </div>
 </div>
 
-<!-- 3. OTP Verification Modal -->
-<div class="p-modal-overlay" id="modal-otp" role="dialog" aria-modal="true">
+<!-- 3. Handoff Code Modal -->
+<div class="p-modal-overlay" id="modal-handoff-code" role="dialog" aria-modal="true">
   <div class="p-modal" style="max-width:420px;">
     <div class="p-modal-header">
-      <h2 class="p-modal-title" id="otp-modal-title">Verify Pickup OTP</h2>
-      <button class="p-modal-close" onclick="closeModal('modal-otp')">✕</button>
+      <h2 class="p-modal-title" id="handoff-code-title">Confirm Pickup Code</h2>
+      <button class="p-modal-close" onclick="closeModal('modal-handoff-code')">✕</button>
     </div>
     <div class="p-modal-body">
       <div class="p-otp-wrap">
-        <div class="p-otp-title" id="otp-title">Enter Pickup OTP</div>
-        <div class="p-otp-hint" id="otp-hint">Ask the donor for the 6-digit pickup verification code.</div>
-        <div class="p-otp-fields">
-          <input class="p-otp-box" maxlength="1" id="otp-1" type="text" inputmode="numeric" pattern="[0-9]" autocomplete="off" autocapitalize="off" spellcheck="false" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          <input class="p-otp-box" maxlength="1" id="otp-2" type="text" inputmode="numeric" pattern="[0-9]" autocomplete="off" autocapitalize="off" spellcheck="false" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          <input class="p-otp-box" maxlength="1" id="otp-3" type="text" inputmode="numeric" pattern="[0-9]" autocomplete="off" autocapitalize="off" spellcheck="false" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          <input class="p-otp-box" maxlength="1" id="otp-4" type="text" inputmode="numeric" pattern="[0-9]" autocomplete="off" autocapitalize="off" spellcheck="false" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          <input class="p-otp-box" maxlength="1" id="otp-5" type="text" inputmode="numeric" pattern="[0-9]" autocomplete="off" autocapitalize="off" spellcheck="false" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-          <input class="p-otp-box" maxlength="1" id="otp-6" type="text" inputmode="numeric" pattern="[0-9]" autocomplete="off" autocapitalize="off" spellcheck="false" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
-        </div>
-        <div id="otp-error" style="color:#b91c1c; font-size:.82rem; font-weight:700; display:none; margin-top:-12px; margin-bottom:12px;"></div>
+        <div class="p-otp-title" id="handoff-code-label">Enter handoff code</div>
+        <div class="p-otp-hint" id="handoff-code-hint">Ask the donor to provide the pickup handoff code.</div>
+        <input class="p-handoff-code-input" id="handoff-code-input" type="text" inputmode="text" maxlength="8" minlength="8" pattern="[A-HJ-NP-Z2-9]{8}" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="8-character handoff code" required>
+        <div id="handoff-code-error" style="color:#b91c1c; font-size:.82rem; font-weight:700; display:none; margin-top:8px;"></div>
       </div>
     </div>
     <div class="p-modal-footer">
-      <button class="btn btn-outline" onclick="closeModal('modal-otp')">Cancel</button>
-      <button class="btn btn-primary btn-full" id="btn-verify-otp">Verify &amp; Confirm</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-handoff-code')">Cancel</button>
+      <button class="btn btn-primary btn-full" id="btn-verify-code">Confirm Handoff</button>
     </div>
   </div>
 </div>

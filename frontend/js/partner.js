@@ -119,7 +119,7 @@ const state = {
   assignments: [],
   activeAssignment: null,
   selectedDonationId: null,
-  pendingOtp: null,   // { type: 'pickup'|'delivery', assignmentId }
+  pendingHandoffCode: null,   // { type: 'pickup'|'delivery', assignmentId }
   activeTab: 'active',
   notifInterval: null,
   chartsRendered: false,
@@ -148,7 +148,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   initSidebar();
   initNav();
   initAvailabilityToggle();
-  initOtpInputs();
+  initHandoffCodeInput();
+  initHandoffCodeCopy();
   initProofUpload();
   initLogout();
   initOfflineDetection();
@@ -617,7 +618,7 @@ async function acceptDonation(id) {
   try {
     const res = await request(`/api/partner/donations/${id}/accept`, { method: 'POST' });
     closeModal('modal-confirm-accept');
-    toast('Assignment accepted successfully! 🎯');
+    toast('Assignment accepted. Pickup and delivery handoff codes are ready in the tracker.');
     await Promise.allSettled([loadDonations(), loadAssignments()]);
     navigate('pickup-delivery');
   } catch (err) {
@@ -881,6 +882,13 @@ function buildTrackerAction(a, status) {
           <div class="map-icon">🗺️</div>
           <span>Tap to open navigation</span>
         </div>
+        <div style="margin:12px 0;padding:12px;border:1px solid #bbf7d0;border-radius:12px;background:#f0fdf4;">
+          <div style="font-size:.75rem;font-weight:800;color:#166534;">Pickup handoff code · share with donor</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px;">
+            <strong style="font:800 1.25rem 'DM Mono',monospace;letter-spacing:.16em;color:#14532d;">${esc(a.pickup_code || 'Generating…')}</strong>
+            <button type="button" class="btn btn-outline btn-sm" data-copy-handoff-code="${esc(a.pickup_code || '')}">Copy</button>
+          </div>
+        </div>
         ${getPickupActionButtons(a.id, status)}
       </div>
     </div>`;
@@ -903,6 +911,13 @@ function buildTrackerAction(a, status) {
           <div class="map-icon">🗺️</div>
           <span>Tap to open navigation</span>
         </div>
+        <div style="margin:12px 0;padding:12px;border:1px solid #bbf7d0;border-radius:12px;background:#f0fdf4;">
+          <div style="font-size:.75rem;font-weight:800;color:#166534;">Delivery handoff code · share with recipient</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px;">
+            <strong style="font:800 1.25rem 'DM Mono',monospace;letter-spacing:.16em;color:#14532d;">${esc(a.delivery_code || 'Generating…')}</strong>
+            <button type="button" class="btn btn-outline btn-sm" data-copy-handoff-code="${esc(a.delivery_code || '')}">Copy</button>
+          </div>
+        </div>
         ${getDistributionActionButtons(a.id, status)}
       </div>
     </div>` : '';
@@ -913,7 +928,7 @@ function buildTrackerAction(a, status) {
 function getPickupActionButtons(id, status) {
   if (status === 'ASSIGNED') return `<button class="btn btn-primary btn-full btn-lg" id="btn-track-action">🚗 Start Navigation</button>`;
   if (status === 'GOING_TO_PICKUP') return `<button class="btn btn-primary btn-full btn-lg" id="btn-track-action">🏪 I've Arrived at Donor</button>`;
-  if (status === 'ARRIVED_AT_PICKUP') return `<button class="btn btn-primary btn-full btn-lg" id="btn-track-action">🔑 Verify Pickup OTP</button>`;
+  if (status === 'ARRIVED_AT_PICKUP') return `<button class="btn btn-primary btn-full btn-lg" id="btn-track-action">Confirm Pickup Code</button>`;
   if (status === 'FOOD_COLLECTED' || status === 'IN_TRANSIT' || status === 'ARRIVED_AT_DESTINATION') return `<div style="padding:10px 14px; background:#f0fdf4; border:1px solid #a7f3d0; border-radius:12px; font-size:.85rem; font-weight:700; color:#166534;">✅ Food Collected</div>`;
   return '';
 }
@@ -921,7 +936,7 @@ function getPickupActionButtons(id, status) {
 function getDistributionActionButtons(id, status) {
   if (status === 'FOOD_COLLECTED') return `<button class="btn btn-primary btn-full btn-lg" id="btn-dist-action">🚚 Start Distribution Trip</button>`;
   if (status === 'IN_TRANSIT') return `<button class="btn btn-primary btn-full btn-lg" id="btn-dist-action">🏛️ I've Arrived at Destination</button>`;
-  if (status === 'ARRIVED_AT_DESTINATION') return `<button class="btn btn-primary btn-full btn-lg" id="btn-dist-action">🔑 Verify Delivery OTP</button>`;
+  if (status === 'ARRIVED_AT_DESTINATION') return `<button class="btn btn-primary btn-full btn-lg" id="btn-dist-action">Confirm Delivery Code</button>`;
   if (status === 'DELIVERED' || status === 'DISTRIBUTED') return `<button class="btn btn-primary btn-full btn-lg" id="btn-dist-action">✅ Confirm Distribution</button>`;
   return '';
 }
@@ -938,9 +953,9 @@ function bindTrackerActions(a, status) {
         toast('Navigation started! En route to donor. 🚗');
       } else if (status === 'GOING_TO_PICKUP') {
         await request(`/api/partner/assignments/${a.id}/arrive`, { method: 'POST' });
-        toast("Arrived at pickup! Ask donor for OTP. 🏪");
+        toast('Arrived at pickup. Share the pickup handoff code with the donor.');
       } else if (status === 'ARRIVED_AT_PICKUP') {
-        openOtpModal('pickup', a.id);
+        openHandoffCodeModal('pickup', a.id);
         trackBtn.disabled = false;
         return;
       }
@@ -960,9 +975,9 @@ function bindTrackerActions(a, status) {
         toast('Distribution trip started! 🚚');
       } else if (status === 'IN_TRANSIT') {
         await request(`/api/partner/assignments/${a.id}/arrive-destination`, { method: 'POST' });
-        toast("Arrived at destination! Ask recipient for OTP. 🏛️");
+        toast('Arrived at destination. Share the delivery handoff code with the recipient.');
       } else if (status === 'ARRIVED_AT_DESTINATION') {
-        openOtpModal('delivery', a.id);
+        openHandoffCodeModal('delivery', a.id);
         distBtn.disabled = false;
         return;
       } else if (status === 'DELIVERED' || status === 'DISTRIBUTED') {
@@ -980,78 +995,77 @@ function bindTrackerActions(a, status) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   OTP VERIFICATION
+   PICKUP & DELIVERY HANDOFF CODES
 ════════════════════════════════════════════════════════════════════ */
-function initOtpInputs() {
-  const boxes = $$('.p-otp-box');
-  boxes.forEach((box, i) => {
-    box.addEventListener('input', () => {
-      box.value = box.value.replace(/\D/g, '').slice(-1);
-      if (box.value && i < boxes.length - 1) boxes[i + 1].focus();
-      box.classList.toggle('filled', !!box.value);
-    });
-    box.addEventListener('keydown', e => {
-      if (e.key === 'Backspace' && !box.value && i > 0) boxes[i - 1].focus();
-    });
-    box.addEventListener('paste', e => {
-      e.preventDefault();
-      const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
-      digits.split('').forEach((d, j) => { if (boxes[j]) { boxes[j].value = d; boxes[j].classList.add('filled'); } });
-      if (boxes[Math.min(digits.length, 5)]) boxes[Math.min(digits.length, 5)].focus();
-    });
+function initHandoffCodeInput() {
+  const input = $('#handoff-code-input');
+  input?.addEventListener('input', () => {
+    input.value = input.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 8);
   });
-
-  $('#btn-verify-otp')?.addEventListener('click', submitOtp);
+  $('#btn-verify-code')?.addEventListener('click', submitHandoffCode);
 }
 
-function openOtpModal(type, assignmentId) {
-  state.pendingOtp = { type, assignmentId };
-  const title = type === 'pickup' ? 'Enter Pickup OTP' : 'Enter Distribution OTP';
+function initHandoffCodeCopy() {
+  document.addEventListener('click', async event => {
+    const button = event.target.closest('[data-copy-handoff-code]');
+    const code = button?.dataset.copyHandoffCode;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      toast('Handoff code copied. Share it with the other party.');
+    } catch (_) {
+      toast(`Handoff code: ${code}`, 'info');
+    }
+  });
+}
+
+function openHandoffCodeModal(type, assignmentId) {
+  state.pendingHandoffCode = { type, assignmentId };
+  const title = type === 'pickup' ? 'Confirm Pickup Code' : 'Confirm Delivery Code';
   const hint = type === 'pickup'
-    ? 'Ask the donor for the 6-digit pickup verification code.'
-    : 'Ask the recipient for the 6-digit distribution verification code.';
-  if ($('#otp-title')) $('#otp-title').textContent = title;
-  if ($('#otp-hint')) $('#otp-hint').textContent = hint;
-  if ($('#otp-modal-title')) $('#otp-modal-title').textContent = title;
-  $$('.p-otp-box').forEach(b => { b.value = ''; b.classList.remove('filled', 'error'); });
-  hideEl('otp-error');
-  openModal('modal-otp');
-  setTimeout(() => $('#otp-1')?.focus(), 100);
+    ? 'Ask the donor to provide the 8-character pickup handoff code.'
+    : 'Ask the recipient to provide the 8-character delivery handoff code.';
+  if ($('#handoff-code-label')) $('#handoff-code-label').textContent = title;
+  if ($('#handoff-code-hint')) $('#handoff-code-hint').textContent = hint;
+  if ($('#handoff-code-title')) $('#handoff-code-title').textContent = title;
+  const input = $('#handoff-code-input');
+  if (input) input.value = '';
+  hideEl('handoff-code-error');
+  openModal('modal-handoff-code');
+  setTimeout(() => input?.focus(), 100);
 }
 
-async function submitOtp() {
-  const otp = $$('.p-otp-box').map(b => b.value).join('');
-  if (otp.length < 6) {
-    showOtpError('Please enter all 6 digits.');
+async function submitHandoffCode() {
+  const code = ($('#handoff-code-input')?.value || '').trim().toUpperCase();
+  if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) {
+    showHandoffCodeError('Enter the full 8-character handoff code.');
     return;
   }
-  const ctx = state.pendingOtp;
+  const ctx = state.pendingHandoffCode;
   if (!ctx) return;
 
-  const btn = $('#btn-verify-otp');
-  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+  const btn = $('#btn-verify-code');
+  if (btn) { btn.disabled = true; btn.textContent = 'Confirming…'; }
 
   try {
     const endpoint = ctx.type === 'pickup' ? 'verify-pickup' : 'verify-delivery';
     const res = await request(`/api/partner/assignments/${ctx.assignmentId}/${endpoint}`, {
-      method: 'POST', body: { otp }
+      method: 'POST', body: { code }
     });
-    closeModal('modal-otp');
-    toast(res.message || (ctx.type === 'pickup' ? '✅ Food collected successfully!' : '✅ Delivery verified!'));
+    closeModal('modal-handoff-code');
+    toast(res.message || (ctx.type === 'pickup' ? 'Food collected successfully.' : 'Delivery confirmed.'));
     await loadAssignments();
     renderTrackerView();
     if (ctx.type === 'delivery') openDistributionModal(ctx.assignmentId);
   } catch (err) {
-    showOtpError(err.message || 'Invalid OTP code. Check with the donor/recipient.');
-    $$('.p-otp-box').forEach(b => b.classList.add('error'));
-    setTimeout(() => $$('.p-otp-box').forEach(b => b.classList.remove('error')), 600);
+    showHandoffCodeError(err.message || 'Invalid handoff code. Check with the donor/recipient.');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Verify & Confirm'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirm Handoff'; }
   }
 }
 
-function showOtpError(msg) {
-  const el = $('#otp-error');
+function showHandoffCodeError(msg) {
+  const el = $('#handoff-code-error');
   if (el) { el.textContent = msg; el.style.display = 'block'; }
 }
 
