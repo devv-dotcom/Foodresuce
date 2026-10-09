@@ -226,6 +226,8 @@ export const initNgoDashboard = async () => {
     const renderAvailableDonation = d => {
       const card = document.createElement('article');
       card.className = `donation-card ${d.is_urgent ? 'urgent-border' : ''}`;
+      const donorDeclarationsComplete = [d.safety_hygiene_confirmed, d.safety_storage_confirmed, d.safety_deadline_confirmed, d.safety_accuracy_confirmed]
+        .every(value => value === true || Number(value) === 1);
       const distBadge = d.distance_km !== null
         ? `<span class="badge-distance">📍 ${d.distance_km} km away</span>`
         : '';
@@ -240,7 +242,7 @@ export const initNgoDashboard = async () => {
             <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
               ${distBadge}
               ${urgentBadge}
-              <span class="badge-verified">🛡️ Safety Verified</span>
+              <span class="badge-declarations">${donorDeclarationsComplete ? 'Donor declarations recorded' : 'Legacy listing · details unavailable'}</span>
             </div>
           </div>
           <span data-expiry-time="${d.expiry_time}">${d.countdown_text || ''}</span>
@@ -248,7 +250,8 @@ export const initNgoDashboard = async () => {
         <p style="margin:6px 0 12px; font-size:.86rem; color:#475549;">
           <strong>Quantity:</strong> ${escapeHtml(d.quantity)} &bull; 
           <strong>Type:</strong> ${escapeHtml(d.food_type === 'veg' ? '🥦 Veg' : '🍗 Non-Veg')} &bull; 
-          <strong>Location:</strong> ${escapeHtml(d.pickup_address || d.city || '')}
+          <strong>Pickup:</strong> ${escapeHtml([d.pickup_address, d.pickup_city || d.business_city || d.city].filter(Boolean).join(', '))}<br>
+          <strong>Storage declared:</strong> ${escapeHtml(d.storage_condition || 'Not recorded')}
         </p>
         <div style="display:flex; gap:8px;">
           <button type="button" class="btn-accept" data-action="accept-donation" data-id="${d.id}">Accept Donation</button>

@@ -45,7 +45,7 @@ exports.getDashboard = async (req, res, next) => {
         SUM(status = 'cancelled') AS cancelledDonations,
         COALESCE(SUM(number_of_meals), 0) AS foodSaved
        FROM donations 
-       WHERE business_user_id = ? AND deleted_at IS NULL`,
+       WHERE business_user_id = ?`,
       [req.user.id]
     );
     const stats = statsRows[0] || {};
@@ -85,7 +85,8 @@ exports.getDonations = async (req, res, next) => {
       where: 'WHERE d.business_user_id = ?',
       values: [req.user.id],
       limit: 50,
-      offset: 0
+      offset: 0,
+      includeDeleted: true
     });
     return res.json({ success: true, donations });
   } catch (error) { next(error); }

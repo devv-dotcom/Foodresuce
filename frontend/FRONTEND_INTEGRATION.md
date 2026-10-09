@@ -1,69 +1,32 @@
-# Food Rescue Frontend Integration
+# Frontend and API integration
 
-## 1. Project Structure
+The root Express server serves this directory and the API from one origin. The canonical browser entry point is `js/app.js`, which initializes authentication, dashboard modules, donations, profiles, notifications, contact forms, and shared UI features.
 
-The new browser modules live in `js/`: `api.js`, `auth.js`, `dashboard.js`, `donation.js`, `ngo.js`, `volunteer.js`, `admin.js`, `contact.js`, `profile.js`, `utils.js`, and `app.js`.
+## Page routes
 
-## 2. API Helper
+- Public: `index.html`, `about.html`, `how-it-works.html`, `faq.html`, `contact.html`, `freshness.html`.
+- Account: `login.html`, `register.html`, `forgot-password.html`, `admin/login.html`.
+- Workspaces: `business/dashboard.html`, `ngo/dashboard.html`, `admin/dashboard.html`.
+- Donation: `donate.html`.
 
-`api.js` is the single Fetch client. It parses JSON, attaches bearer tokens, normalizes errors, applies a request timeout, and safely manages session storage. It defaults to same-origin APIs in production. When a local static server is used, it safely targets the Express development API on port `5000`; development overrides use `window.FOODBRIDGE_API_BASE` or an optional `data-api-base` supplied by the deployment configuration.
+Use the Express server for local work (`npm start` from the repository root). Opening pages from `file://` bypasses the API and is unsupported.
 
-## 3. Authentication Integration
+## Authentication
 
-Add `data-api-form="login"` or `data-api-form="register"` to a form. The form field names must match the backend request fields. Sign-in stores the token and redirects by role.
+The normal sign-in form accepts donor and NGO roles. Donor and NGO sign-ins require an email code. The separate admin page uses the configured admin email/password and does not use OTP. NGO registration creates a pending application and does not establish a session until an administrator approves it. OAuth providers are not implemented.
 
-## 4. Dashboard Integration
+The browser stores the access token and user payload in local storage. `api.js` adds the bearer token and normalizes JSON errors. Sensitive API operations must continue to enforce authorization in Express routes and controllers; frontend route guards are only a navigation aid.
 
-Set `data-dashboard="business|ngo|volunteer|admin"` on a dashboard body. Use `data-api-value="field"` for API values and the documented list container IDs for histories.
+## Main API workflows
 
-## 5. Donation Integration
+- Auth and recovery: `/api/auth/*`, `/api/ngo/register`, `/api/admin/login`.
+- Donor profile and donations: `/api/business/*`, `/api/donations/*`.
+- NGO profile, available donations, history, and acceptance: `/api/ngo/*`.
+- Admin moderation and platform operations: `/api/admin/*`.
+- Contact form: `POST /api/contact`.
+- Notifications and impact: `/api/notifications`, `/api/analytics/public`.
+- Partner, assignment, pickup, and volunteer APIs are mounted separately and require authenticated, role-authorized access. Live pickup tracking is private to an involved account.
 
-Use `data-api-form="donation"`, `data-donation-image`, and `data-donation-preview`. Valid images are sent as multipart `images` files.
+## UI behavior
 
-## 6. NGO Integration
-
-`data-action="load-available-donations"` loads donations and renders accept buttons that call `/api/ngo/accept/:id`.
-
-## 7. Volunteer Integration
-
-`data-action="load-pickups"` loads pickup requests. The action names `accept-pickup`, `start-pickup`, `collect-pickup`, `deliver-pickup`, and `complete-pickup` map to the matching pickup APIs.
-
-## 8. Admin Integration
-
-Use `data-admin-list="/api/admin/businesses" data-target="#results"` to load an admin list, or `data-admin-endpoint="/api/admin/business/approve/42"` for a moderation button.
-
-## 9. Contact Form Integration
-
-Use `data-api-form="contact"` with `name`, `email`, `subject`, and `message` fields. It calls `POST /api/contact`.
-
-## 10. Profile Integration
-
-Use `data-api-form="profile"`; fields use role profile API names. Add `data-profile-image`, `data-profile-preview`, and `data-action="upload-profile-image"` to support the available profile uploads.
-
-## 11. JWT Handling
-
-The JWT and public user payload are stored in local storage. Every authenticated API call adds `Authorization: Bearer <token>` and a 401 clears the session.
-
-## 12. Route Protection
-
-Add `data-required-role="admin|ngo|volunteer|business"` to protected page bodies. Add `data-guest-only="true"` on login/register pages for automatic dashboard redirection.
-
-## 13. Loading Spinner
-
-Requests disable their trigger, set `aria-busy`, and show a short loading label until the server responds.
-
-## 14. Toast Notification
-
-Accessible success, warning, and error toasts are created at runtime; no additional markup is needed.
-
-## 15. Error Handling
-
-The client converts API failures into a common error type and shows useful feedback for 400, 401, 403, 404, and server errors.
-
-## 16. Best Practices
-
-Use HTTPS in production, set an explicit API base URL, keep CORS restrictive, and escape any API-derived value before rendering HTML. Fetch does not expose reliable browser upload-progress events, so this Fetch-only integration uses button loading state instead.
-
-## Existing Frontend Note
-
-The current repository has one landing page and only a newsletter form. It now loads `js/app.js`, but it contains none of the data attributes or account/dashboard forms described above, so the role workflows will activate once those existing HTML pages are added or annotated. Also, the backend currently has no `POST /api/contact` route; the contact module is ready for that contract but will receive 404 until that endpoint exists.
+Dashboard scripts render API errors through `notifyError`; forms use loading feedback and toasts. Food-handling fields are donor declarations. The timing estimate indicates only the entered deadline and pickup urgency and cannot certify safety. Contact form submission requires the API and database.

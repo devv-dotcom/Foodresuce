@@ -52,6 +52,7 @@ body { font-family: Manrope, system-ui, sans-serif; margin: 0; background: #f5f7
 .badge-distance { background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; }
 .badge-urgent-tag { background: #ffe4e6; color: #be123c; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 800; }
 .badge-verified { background: #dcfce7; color: #15803d; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 800; }
+.badge-declarations { background: #fef3c7; color: #92400e; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 800; }
 .countdown-urgent { background: #fee2e2; color: #dc2626; font-size: 0.78rem; font-weight: 800; padding: 4px 8px; border-radius: 8px; }
 .countdown-normal { background: #f1f5f9; color: #334155; font-size: 0.78rem; font-weight: 700; padding: 4px 8px; border-radius: 8px; }
 

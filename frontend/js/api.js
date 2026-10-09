@@ -71,7 +71,7 @@ export const notifyError = error => {
 export const login = (credentials, endpoint = '/api/auth/login') => request(endpoint, { method: 'POST', body: credentials, auth: false });
 export const register = (details, endpoint = '/api/auth/register') => request(endpoint, { method: 'POST', body: details, auth: false });
 export const fetchProfile = endpoint => request(endpoint);
-export const getDonations = () => request('/api/donations');
+export const getDonations = () => request('/api/business/donations');
 export const createDonation = data => request('/api/donations', { method: 'POST', body: data });
 export const acceptDonation = id => request(`/api/ngo/accept/${id}`, { method: 'POST' });
 export const acceptPickup = id => request(`/api/pickups/accept/${id}`, { method: 'POST' });

@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const Donation = require('../models/Donation');
 const DonationImage = require('../models/DonationImage');
 const { sendNotification, awardPoints } = require('../utils/notify');
+const { safetyDeclarationComplete, donationWindowError } = require('../utils/donationSafety');
 
 const imagePaths = files => (files || []).map(file => `/${path.relative(path.join(__dirname, '..'), file.path).split(path.sep).join('/')}`);
 const pagination = query => ({ limit: Math.min(Math.max(Number(query.limit) || 20, 1), 100), offset: Math.max(Number(query.offset) || 0, 0) });
@@ -28,9 +29,10 @@ const enrichWithCountdown = d => {
 
 exports.createDonation = async (req, res, next) => {
   if (!req.files?.length) return res.status(422).json({ success: false, message: 'At least one food image is required.' });
-  if (new Date(req.body.expiryTime) <= new Date(req.body.preparationTime)) return res.status(422).json({ success: false, message: 'Expiry time must be after preparation time.' });
-  if (!req.body.safetyHygiene || !req.body.safetyFreshness || !req.body.safetyPackaging) {
-    return res.status(422).json({ success: false, message: 'All food safety checklist items must be verified before publishing a donation.' });
+  const windowError = donationWindowError(req.body);
+  if (windowError) return res.status(422).json({ success: false, message: windowError });
+  if (!safetyDeclarationComplete(req.body)) {
+    return res.status(422).json({ success: false, message: 'Complete each donor food-handling declaration before publishing this donation.' });
   }
   const connection = await pool.getConnection();
   try {
@@ -53,7 +55,7 @@ exports.createDonation = async (req, res, next) => {
 
     await connection.commit();
     const createdDonation = enrichWithCountdown(await Donation.findById(donationId));
-    return res.status(201).json({ success: true, message: 'Donation published successfully with verified food safety.', donation: createdDonation });
+    return res.status(201).json({ success: true, message: 'Donation published. Donor food-handling declarations were recorded.', donation: createdDonation });
   } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
 };
 
@@ -145,6 +147,9 @@ exports.emergencyBroadcast = async (req, res, next) => {
 
 exports.updateDonation = async (req, res, next) => {
   try {
+    const windowError = donationWindowError(req.body);
+    if (windowError) return res.status(422).json({ success: false, message: windowError });
+    if (!safetyDeclarationComplete(req.body)) return res.status(422).json({ success: false, message: 'Complete each donor food-handling declaration before updating this donation.' });
     if (!await Donation.categoryExists(req.body.categoryId)) return res.status(422).json({ success: false, message: 'Selected food category does not exist.' });
     const updated = await Donation.update(req.params.id, req.user.id, req.body);
     if (!updated) return res.status(404).json({ success: false, message: 'Donation not found, unavailable, or cannot be edited after acceptance.' });
@@ -157,6 +162,6 @@ exports.deleteDonation = async (req, res, next) => {
   try {
     const deleted = await Donation.delete(req.params.id, req.user.id);
     if (!deleted) return res.status(404).json({ success: false, message: 'Donation not found or cannot be deleted after acceptance.' });
-    return res.json({ success: true, message: 'Donation deleted successfully.' });
+    return res.json({ success: true, message: 'Donation cancelled successfully.' });
   } catch (error) { next(error); }
 };
