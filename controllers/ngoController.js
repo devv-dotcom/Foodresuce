@@ -10,6 +10,8 @@ const { sendNotification, awardPoints } = require('../utils/notify');
 const { getUrgency, scoreDonationForNgo, urgencyRank } = require('../services/rescueEngine');
 
 const tokenFor = user => jwt.sign({ sub: user.id, role: 'ngo' }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+const normalizeCity = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  .split(',')[0].trim().toLocaleLowerCase().replace(/\s+/g, ' ');
 
 const enrichWithCountdown = (d, userLat = null, userLon = null) => {
   if (!d) return d;
@@ -113,7 +115,7 @@ exports.browseDonations = async (req, res, next) => {
     const hasLatitude = req.query.latitude !== undefined;
     const hasLongitude = req.query.longitude !== undefined;
     if (hasLatitude !== hasLongitude) return res.status(422).json({ success: false, message: 'Provide both latitude and longitude for nearby food discovery.' });
-    const [ngoRows] = await pool.execute('SELECT city, latitude, longitude FROM users WHERE id = ? AND role = \'ngo\' LIMIT 1', [req.user.id]);
+    const [ngoRows] = await pool.execute('SELECT city, pincode, latitude, longitude FROM users WHERE id = ? AND role = \'ngo\' LIMIT 1', [req.user.id]);
     const ngo = ngoRows[0] || null;
     const candidateLat = ngo?.latitude !== null && ngo?.latitude !== undefined ? Number(ngo.latitude) : null;
     const candidateLon = ngo?.longitude !== null && ngo?.longitude !== undefined ? Number(ngo.longitude) : null;
@@ -141,11 +143,14 @@ exports.browseDonations = async (req, res, next) => {
     let mapped = donations.map(d => {
       const enriched = enrichWithCountdown(d, userLat, userLon);
       const match = scoreDonationForNgo(enriched, { distanceKm: enriched.distance_km, radiusKm });
-      const donationCity = String(d.pickup_city || d.business_city || '').trim().toLocaleLowerCase();
-      const ngoCity = String(ngo?.city || '').trim().toLocaleLowerCase();
+      const donationCity = normalizeCity(d.pickup_city || d.business_city);
+      const ngoCity = normalizeCity(ngo?.city);
       const sameCity = Boolean(donationCity && ngoCity && donationCity === ngoCity);
+      const donationPincode = String(d.pickup_pincode || '').replace(/\D/g, '');
+      const ngoPincode = String(ngo?.pincode || '').replace(/\D/g, '');
+      const samePincode = Boolean(donationPincode && ngoPincode && donationPincode === ngoPincode);
       const withinRadius = Number.isFinite(enriched.distance_km) && enriched.distance_km <= radiusKm;
-      return { ...enriched, ...match, location_match: withinRadius || sameCity, same_city: sameCity };
+      return { ...enriched, ...match, location_match: withinRadius || samePincode || sameCity, same_city: sameCity, same_pincode: samePincode };
     });
 
     // Emergency alerts lead; then urgency, match score, distance, and expiry.

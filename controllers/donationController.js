@@ -79,12 +79,13 @@ exports.createDonation = async (req, res, next) => {
       latitude: req.body.latitude,
       longitude: req.body.longitude,
       city: req.body.city,
+      pincode: req.body.pincode,
       connection
     });
     for (const ngo of nearbyNgos) {
       const locationText = Number.isFinite(ngo.distance_km)
         ? `${ngo.distance_km} km from your registered location`
-        : `in ${req.body.city}`;
+        : `in ${req.body.city}${req.body.pincode ? ` (${req.body.pincode})` : ''}`;
       await sendNotification({
         recipientUserId: ngo.user_id,
         targetRole: 'ngo',
@@ -212,7 +213,7 @@ exports.emergencyBroadcast = async (req, res, next) => {
     try {
       await connection.beginTransaction();
       await connection.execute("UPDATE donations SET is_emergency = TRUE WHERE id = ? AND status = 'available' AND expiry_time > NOW()", [donation.id]);
-      const nearbyNgos = await NGO.findNearbyNGOsByCoordinates({ latitude: donation.latitude, longitude: donation.longitude, city: donation.pickup_city || donation.business_city, connection });
+      const nearbyNgos = await NGO.findNearbyNGOsByCoordinates({ latitude: donation.latitude, longitude: donation.longitude, city: donation.pickup_city || donation.business_city, pincode: donation.pickup_pincode, connection });
       for (const ngo of nearbyNgos) {
         await sendNotification({
           recipientUserId: ngo.user_id,
