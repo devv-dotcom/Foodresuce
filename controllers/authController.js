@@ -13,6 +13,27 @@ const loginOtpLifetimeMs = Number(process.env.LOGIN_OTP_TTL_MS || 10 * 60 * 1000
 
 const deliveryFailureMessage = error => {
   const detail = String(error?.message || '').toLowerCase();
+  if (error?.code === 'EMAIL_PROVIDER_MISSING') {
+    return 'Email delivery is not configured. Add RESEND_API_KEY and a verified MAIL_FROM sender to Render.';
+  }
+  if (error?.code === 'RESEND_MAIL_FROM_MISSING') {
+    return 'Set MAIL_FROM to an email address on a domain verified in Resend, then try again.';
+  }
+  if (error?.code === 'RESEND_HTTP_401') {
+    return 'Resend rejected the API key. Create or copy a valid Resend API key into Render.';
+  }
+  if (error?.code === 'RESEND_HTTP_403') {
+    return 'Resend blocked this send. Check account activation and the verified sender domain in Resend.';
+  }
+  if (error?.code === 'RESEND_HTTP_400' || error?.code === 'RESEND_HTTP_422') {
+    return 'Resend rejected the sender or message. Verify MAIL_FROM belongs to a verified domain and try again.';
+  }
+  if (error?.code === 'RESEND_HTTP_429') {
+    return 'Resend is rate limiting email delivery. Wait a few minutes, then request a new code.';
+  }
+  if (error?.code?.startsWith('RESEND_HTTP_5')) {
+    return 'Resend is temporarily unavailable. Wait a few minutes, then request a new code.';
+  }
   if (error?.code === 'BREVO_API_KEY_MISSING') {
     return 'Email delivery is not configured. Add BREVO_API_KEY to the Render environment and redeploy.';
   }
@@ -32,7 +53,9 @@ const deliveryFailureMessage = error => {
     return 'Brevo is temporarily unavailable. Wait a few minutes, then request a new code.';
   }
   if (/sender|from.*email|invalid.*email/.test(detail)) {
-    return 'The OTP sender is not verified. Verify the MAIL_FROM email in Brevo, then try again.';
+    return error?.provider === 'resend'
+      ? 'The OTP sender is not verified. Verify the sender domain in Resend, then try again.'
+      : 'The OTP sender is not verified. Verify the MAIL_FROM email in Brevo, then try again.';
   }
   if (/api.?key|unauthori[sz]ed|forbidden|authentication/.test(detail)) {
     return 'The email service needs a valid Brevo API key. Update BREVO_API_KEY in Render, then try again.';

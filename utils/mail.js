@@ -1,14 +1,19 @@
 const nodemailer = require('nodemailer');
 
-const usingBrevo = Boolean(process.env.BREVO_API_KEY);
+// Prefer Resend when configured. Both providers use HTTPS so they work on
+// hosts that block outbound SMTP, including Render's free web services.
+const usingResend = Boolean(process.env.RESEND_API_KEY);
+const usingBrevo = !usingResend && Boolean(process.env.BREVO_API_KEY);
 
-// Brevo validates its own verified sender.  Prefer MAIL_FROM when using its
-// HTTPS API; the Gmail restriction only applies to the SMTP fallback.
-const fromAddress = usingBrevo
-  ? (process.env.MAIL_FROM || process.env.MAIL_USER)
-  : (process.env.MAIL_HOST?.toLowerCase() === 'smtp.gmail.com' && process.env.MAIL_USER
-    ? `Food Rescue <${process.env.MAIL_USER}>`
-    : (process.env.MAIL_FROM || process.env.MAIL_USER));
+// Resend requires MAIL_FROM to belong to a domain verified in its dashboard.
+// Brevo also validates the sender; Gmail normalization applies to SMTP only.
+const fromAddress = usingResend
+  ? process.env.MAIL_FROM
+  : usingBrevo
+    ? (process.env.MAIL_FROM || process.env.MAIL_USER)
+    : (process.env.MAIL_HOST?.toLowerCase() === 'smtp.gmail.com' && process.env.MAIL_USER
+      ? `Food Rescue <${process.env.MAIL_USER}>`
+      : (process.env.MAIL_FROM || process.env.MAIL_USER));
 
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
@@ -27,10 +32,47 @@ const brevoSender = senderMatch
     : { email: senderValue };
 
 async function deliver(message) {
+  if (usingResend) {
+    if (!fromAddress) {
+      const error = new Error('MAIL_FROM must be set to an address on a verified Resend domain.');
+      error.code = 'RESEND_MAIL_FROM_MISSING';
+      throw error;
+    }
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromAddress,
+        to: [message.to],
+        subject: message.subject,
+        text: message.text,
+        html: message.html
+      })
+    });
+
+    if (!response.ok) {
+      let detail = '';
+      try {
+        const body = await response.json();
+        detail = body.message || body.error || body.name || '';
+      } catch (_) { /* Keep provider errors bounded and safe for logs. */ }
+      const error = new Error(`Resend email request failed (${response.status}): ${detail}`);
+      error.code = `RESEND_HTTP_${response.status}`;
+      error.statusCode = response.status;
+      error.provider = 'resend';
+      throw error;
+    }
+    return;
+  }
+
   if (!usingBrevo) {
     if (process.env.NODE_ENV !== 'production') return transporter.sendMail(message);
-    const error = new Error('BREVO_API_KEY is not configured; the SMTP fallback may be unavailable on this host.');
-    error.code = 'BREVO_API_KEY_MISSING';
+    const error = new Error('No transactional email API key is configured for this host.');
+    error.code = 'EMAIL_PROVIDER_MISSING';
     throw error;
   }
 

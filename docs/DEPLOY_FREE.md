@@ -19,7 +19,7 @@ The master SQL file uses MySQL-client `SOURCE` commands for the core modules, so
 
 ## 2. Configure free email delivery
 
-Create a free Brevo account, verify a sender address, and create an API key. Render's free web services block outbound SMTP ports used by the existing SMTP configuration; this app uses Brevo's HTTPS email API when `BREVO_API_KEY` is set.
+Create a free Resend account, add a domain you control, publish the DNS records Resend provides, and wait for the domain to verify. Set `RESEND_API_KEY` and `MAIL_FROM` (an address on that verified domain) in Render. The app sends OTP mail through Resend's HTTPS API, which works on Render's free web service. The existing Brevo integration remains available if `RESEND_API_KEY` is unset.
 
 ## 3. Deploy the web service
 
