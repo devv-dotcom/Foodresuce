@@ -39,10 +39,11 @@ async function runAutoMigration() {
         await connection.query(`ALTER TABLE users ADD COLUMN badge_level VARCHAR(50) NOT NULL DEFAULT 'Bronze Hero' AFTER impact_points`);
         console.log('[MIGRATION] Added users.badge_level');
       }
-      if (!(await helperCheckColumn('users', 'latitude'))) {
-        await connection.query(`ALTER TABLE users ADD COLUMN latitude DECIMAL(10,7) NULL AFTER pincode, ADD COLUMN longitude DECIMAL(10,7) NULL AFTER latitude`);
-        console.log('[MIGRATION] Added users.latitude/longitude');
-      }
+      // Check each coordinate field independently. A partial earlier migration
+      // may have created latitude without longitude; checking only latitude
+      // would leave NGO feed/profile queries failing on the missing column.
+      await ensureColumn('users', 'latitude', 'DECIMAL(10,7) NULL AFTER pincode');
+      await ensureColumn('users', 'longitude', 'DECIMAL(10,7) NULL AFTER latitude');
 
       // 2. Donations table additions
       // The full admin-module SQL adds these fields, but Render startup only

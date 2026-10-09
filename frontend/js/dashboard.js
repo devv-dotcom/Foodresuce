@@ -292,7 +292,24 @@ export const initNgoDashboard = async () => {
     setTxt('count-ngo-impact', history ? (totalImpact > 0 ? `${totalImpact.toLocaleString()} meals` : '0') : 'Unavailable');
 
     if (donationsResult.status === 'rejected') {
-      $('#available-donations-list')?.replaceChildren(Object.assign(document.createElement('p'), { textContent: 'Available donations could not be loaded. Please refresh to try again.' }));
+      const feed = $('#available-donations-list');
+      if (feed) {
+        const error = donationsResult.reason;
+        const notice = document.createElement('div');
+        notice.className = 'ngo-feed-error';
+        const title = document.createElement('strong');
+        title.textContent = 'Available food could not be loaded.';
+        const detail = document.createElement('p');
+        const status = Number(error?.status);
+        detail.textContent = `${error?.message || 'The Food Rescue API did not return a response.'}${status > 0 ? ` (HTTP ${status})` : ''}`;
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'btn-accept';
+        retry.textContent = 'Retry food feed';
+        retry.addEventListener('click', () => location.reload());
+        notice.append(title, detail, retry);
+        feed.replaceChildren(notice);
+      }
       notifyError(donationsResult.reason);
     }
     if (historyResult.status === 'rejected') {
