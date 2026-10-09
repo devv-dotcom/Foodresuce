@@ -1,4 +1,4 @@
-import { getDonations, notifyError, request } from './api.js';
+import { createDonation, getDonations, notifyError, request } from './api.js';
 import { $, formDataObject, renderList, setLoading, toast, validateImage, wireImagePreview, escapeHtml } from './utils.js';
 
 const donationItem = donation => {
