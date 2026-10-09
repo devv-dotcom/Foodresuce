@@ -22,13 +22,19 @@ const enrichWithCountdown = (d, userLat = null, userLon = null) => {
   const mins = diffMins % 60;
 
   let distanceKm = null;
-  if (userLat !== null && userLon !== null && d.latitude !== null && d.longitude !== null) {
+  const donationLat = Number(d.latitude);
+  const donationLon = Number(d.longitude);
+  if (userLat !== null && userLon !== null && d.latitude !== null && d.longitude !== null
+      && Number.isFinite(userLat) && Number.isFinite(userLon)
+      && Number.isFinite(donationLat) && Math.abs(donationLat) <= 90
+      && Number.isFinite(donationLon) && Math.abs(donationLon) <= 180) {
     const R = 6371;
-    const dLat = (d.latitude - userLat) * Math.PI / 180;
-    const dLon = (d.longitude - userLon) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(userLat * Math.PI / 180) * Math.cos(d.latitude * Math.PI / 180) *
+    const dLat = (donationLat - userLat) * Math.PI / 180;
+    const dLon = (donationLon - userLon) * Math.PI / 180;
+    const rawA = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(userLat * Math.PI / 180) * Math.cos(donationLat * Math.PI / 180) *
               Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const a = Math.max(0, Math.min(1, rawA));
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     distanceKm = Number((R * c).toFixed(1));
   }
@@ -107,8 +113,16 @@ exports.browseDonations = async (req, res, next) => {
     const hasLatitude = req.query.latitude !== undefined;
     const hasLongitude = req.query.longitude !== undefined;
     if (hasLatitude !== hasLongitude) return res.status(422).json({ success: false, message: 'Provide both latitude and longitude for nearby food discovery.' });
-    const userLat = hasLatitude ? Number(req.query.latitude) : null;
-    const userLon = hasLongitude ? Number(req.query.longitude) : null;
+    const [ngoRows] = await pool.execute('SELECT city, latitude, longitude FROM users WHERE id = ? AND role = \'ngo\' LIMIT 1', [req.user.id]);
+    const ngo = ngoRows[0] || null;
+    const candidateLat = ngo?.latitude !== null && ngo?.latitude !== undefined ? Number(ngo.latitude) : null;
+    const candidateLon = ngo?.longitude !== null && ngo?.longitude !== undefined ? Number(ngo.longitude) : null;
+    const hasSavedCoordinates = Number.isFinite(candidateLat) && Math.abs(candidateLat) <= 90
+      && Number.isFinite(candidateLon) && Math.abs(candidateLon) <= 180;
+    const savedLat = hasSavedCoordinates ? candidateLat : null;
+    const savedLon = hasSavedCoordinates ? candidateLon : null;
+    const userLat = hasLatitude ? Number(req.query.latitude) : savedLat;
+    const userLon = hasLongitude ? Number(req.query.longitude) : savedLon;
     if (hasLatitude && (!Number.isFinite(userLat) || Math.abs(userLat) > 90 || !Number.isFinite(userLon) || Math.abs(userLon) > 180)) {
       return res.status(422).json({ success: false, message: 'Nearby food discovery needs valid latitude and longitude values.' });
     }
@@ -120,27 +134,18 @@ exports.browseDonations = async (req, res, next) => {
     let where = "WHERE d.status = 'available' AND d.expiry_time > NOW()";
     const values = [];
 
-    if (userLat !== null && userLon !== null) {
-      // Keep listings without donor GPS visible. Address/city-only donations
-      // are valid and should not disappear when an NGO shares its location.
-      where += ' AND (d.latitude IS NULL OR d.longitude IS NULL OR (6371 * ACOS(COS(RADIANS(?)) * COS(RADIANS(d.latitude)) * COS(RADIANS(d.longitude) - RADIANS(?)) + SIN(RADIANS(?)) * SIN(RADIANS(d.latitude)))) <= ?)';
-      values.push(userLat, userLon, userLat, radiusKm);
-    } else {
-      const ngo = await NGO.findByUserId(req.user.id);
-      if (ngo?.city?.trim()) {
-        where += ' AND LOWER(COALESCE(d.pickup_city, u.city)) = LOWER(?)';
-        values.push(ngo.city.trim());
-      }
-      // A missing NGO city or GPS location should reduce ranking precision,
-      // not hide every valid donation. Keep the feed usable until the NGO
-      // completes its location profile; distance remains unknown in this case.
-    }
+    // Keep location as a ranking signal rather than an eligibility filter.
+    // Address-only and out-of-radius donations remain visible to NGOs.
 
     const donations = await Donation.list({ where, values, limit: req.query.limit || 50, offset: req.query.offset || 0 });
     let mapped = donations.map(d => {
       const enriched = enrichWithCountdown(d, userLat, userLon);
       const match = scoreDonationForNgo(enriched, { distanceKm: enriched.distance_km, radiusKm });
-      return { ...enriched, ...match };
+      const donationCity = String(d.pickup_city || d.business_city || '').trim().toLocaleLowerCase();
+      const ngoCity = String(ngo?.city || '').trim().toLocaleLowerCase();
+      const sameCity = Boolean(donationCity && ngoCity && donationCity === ngoCity);
+      const withinRadius = Number.isFinite(enriched.distance_km) && enriched.distance_km <= radiusKm;
+      return { ...enriched, ...match, location_match: withinRadius || sameCity, same_city: sameCity };
     });
 
     // Emergency alerts lead; then urgency, match score, distance, and expiry.
@@ -148,6 +153,7 @@ exports.browseDonations = async (req, res, next) => {
       if (Boolean(a.is_emergency) !== Boolean(b.is_emergency)) return a.is_emergency ? -1 : 1;
       const urgencyDiff = (urgencyRank[a.urgency] ?? 5) - (urgencyRank[b.urgency] ?? 5);
       if (urgencyDiff) return urgencyDiff;
+      if (a.location_match !== b.location_match) return a.location_match ? -1 : 1;
       if (a.score !== b.score) return b.score - a.score;
       if (a.distance_km !== null && b.distance_km !== null) return a.distance_km - b.distance_km;
       return new Date(a.expiry_time) - new Date(b.expiry_time);

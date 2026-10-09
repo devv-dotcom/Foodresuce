@@ -3,7 +3,6 @@ const pool = require('../config/database');
 const Donation = require('../models/Donation');
 const DonationImage = require('../models/DonationImage');
 const NGO = require('../models/NGO');
-const geoService = require('../services/geoService');
 const { sendNotification, awardPoints } = require('../utils/notify');
 const { safetyDeclarationComplete, donationWindowError } = require('../utils/donationSafety');
 
@@ -11,12 +10,12 @@ const imagePaths = files => (files || []).map(file => `/${path.relative(path.joi
 const pagination = query => ({ limit: Math.min(Math.max(Number(query.limit) || 20, 1), 100), offset: Math.max(Number(query.offset) || 0, 0) });
 const getNgoScope = async req => {
   if (req.user.role !== 'ngo') return null;
-  const profile = await NGO.findByUserId(req.user.id);
   const hasQueryLocation = req.query.latitude !== undefined || req.query.longitude !== undefined;
-  const latitude = hasQueryLocation ? Number(req.query.latitude) : Number(profile?.latitude);
-  const longitude = hasQueryLocation ? Number(req.query.longitude) : Number(profile?.longitude);
-  const validCoordinates = (hasQueryLocation || (profile?.latitude != null && profile?.longitude != null))
-    && Number.isFinite(latitude) && Math.abs(latitude) <= 90 && Number.isFinite(longitude) && Math.abs(longitude) <= 180;
+  if (!hasQueryLocation) return null;
+  const latitude = Number(req.query.latitude);
+  const longitude = Number(req.query.longitude);
+  const validCoordinates = Number.isFinite(latitude) && Math.abs(latitude) <= 90
+    && Number.isFinite(longitude) && Math.abs(longitude) <= 180;
   if (validCoordinates) {
     const radius = Math.min(Math.max(Number(req.query.radiusKm) || Number(process.env.NGO_MATCH_RADIUS_KM) || 35, 1), 250);
     return {
@@ -26,8 +25,7 @@ const getNgoScope = async req => {
     };
   }
   if (hasQueryLocation) return { clause: '1 = 0', values: [] };
-  if (!profile?.city) return { clause: '1 = 0', values: [] };
-  return { clause: 'LOWER(COALESCE(d.pickup_city, u.city)) = LOWER(?)', values: [profile.city.trim()], location: { type: 'city', city: profile.city.trim() } };
+  return { clause: '1 = 0', values: [] };
 };
 const combineScope = (where, values, scope) => {
   if (!scope) return { where, values };
@@ -80,16 +78,20 @@ exports.createDonation = async (req, res, next) => {
     const nearbyNgos = await NGO.findNearbyNGOsByCoordinates({
       latitude: req.body.latitude,
       longitude: req.body.longitude,
+      city: req.body.city,
       connection
     });
     for (const ngo of nearbyNgos) {
+      const locationText = Number.isFinite(ngo.distance_km)
+        ? `${ngo.distance_km} km from your registered location`
+        : `in ${req.body.city}`;
       await sendNotification({
         recipientUserId: ngo.user_id,
         targetRole: 'ngo',
         notificationType: 'new_donation',
         donationId,
         title: isUrgent ? '🚨 URGENT: Food Donation Needs Rescue' : '🍲 New Food Donation Available',
-        message: `${req.body.foodName} (${req.body.quantity}) is available ${ngo.distance_km} km from your registered location.`,
+        message: `${req.body.foodName} (${req.body.quantity}) is available ${locationText}.`,
         connection
       });
     }
@@ -112,18 +114,11 @@ exports.getDonation = async (req, res, next) => {
     const donation = await Donation.findById(req.params.id);
     if (!donation) return res.status(404).json({ success: false, message: 'Donation not found.' });
     if (req.user.role === 'ngo') {
-      const scope = await getNgoScope(req);
       const [ngo] = await pool.execute('SELECT id FROM ngos WHERE user_id = ? LIMIT 1', [req.user.id]);
       const [assigned] = ngo?.length ? await pool.execute('SELECT id FROM accepted_donations WHERE donation_id = ? AND ngo_id = ? LIMIT 1', [donation.id, ngo[0].id]) : [[]];
-      const location = scope?.location;
-      const distanceKm = location?.type === 'coordinates'
-        ? geoService.calculateDistance(location.latitude, location.longitude, donation.latitude, donation.longitude)
-        : null;
-      const eligibleByDistance = distanceKm !== null && distanceKm <= location.radius;
-      const eligibleByCity = location?.type === 'city'
-        && String(donation.pickup_city || donation.business_city || '').toLowerCase() === location.city.toLowerCase();
-      const canView = (donation.status === 'available' && (eligibleByDistance || eligibleByCity)) || assigned.length > 0;
-      if (!canView) return res.status(403).json({ success: false, message: 'This donation is outside your eligible area or is assigned to another NGO.' });
+      const canView = (donation.status === 'available' && new Date(donation.expiry_time) > new Date()) || assigned.length > 0;
+      if (!canView) return res.status(403).json({ success: false, message: 'This donation is no longer available to your NGO.' });
+      delete donation.donor_mobile;
     } else if (req.user.role !== 'admin' && donation.business_user_id !== req.user.id) {
       return res.status(403).json({ success: false, message: 'You do not have access to this donation.' });
     }
@@ -217,7 +212,7 @@ exports.emergencyBroadcast = async (req, res, next) => {
     try {
       await connection.beginTransaction();
       await connection.execute("UPDATE donations SET is_emergency = TRUE WHERE id = ? AND status = 'available' AND expiry_time > NOW()", [donation.id]);
-      const nearbyNgos = await NGO.findNearbyNGOsByCoordinates({ latitude: donation.latitude, longitude: donation.longitude, connection });
+      const nearbyNgos = await NGO.findNearbyNGOsByCoordinates({ latitude: donation.latitude, longitude: donation.longitude, city: donation.pickup_city || donation.business_city, connection });
       for (const ngo of nearbyNgos) {
         await sendNotification({
           recipientUserId: ngo.user_id,

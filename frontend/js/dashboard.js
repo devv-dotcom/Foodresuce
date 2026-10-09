@@ -6,20 +6,6 @@ import { openSmartMatchModal } from './smartMatch.js';
 import { openLeaderboardModal } from './leaderboard.js';
 import { initExpiryCountdowns } from './features.js';
 
-let userCoords = null;
-const acquireCoords = () => new Promise(resolve => {
-  if (userCoords) return resolve(userCoords);
-  if (!navigator.geolocation) return resolve(null);
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      userCoords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-      resolve(userCoords);
-    },
-    () => resolve(null),
-    { timeout: 8000 }
-  );
-});
-
 const setValues = (data, root = document) => $$('[data-api-value]', root).forEach(element => {
   const value = element.dataset.apiValue.split('.').reduce((current, key) => current?.[key], data);
   element.textContent = value ?? '—';
@@ -264,26 +250,23 @@ export const initNgoDashboard = async () => {
         await request('/api/ngo/location', { method: 'PATCH', body: { latitude: position.coords.latitude, longitude: position.coords.longitude } });
         if (status) status.textContent = 'Location saved for nearby donation matching.';
         toast('NGO location updated.');
+        location.reload();
       } catch (error) { notifyError(error); if (status) status.textContent = 'Could not save location.'; }
       finally { button.disabled = false; }
     }, () => { if (status) status.textContent = 'Location was not shared. Nearby sorting is unavailable until it is set.'; button.disabled = false; }, { timeout: 10000 });
   }, { once: true });
   try {
-    const profile = await fetchProfile('/api/ngo/profile');
-    setValues(profile.profile);
-    const welcomeName = $('[data-api-value="fullName"]');
-    if (welcomeName) welcomeName.textContent = profile.profile?.full_name || profile.profile?.ngo_name || 'NGO Partner';
-    const hasSavedCoords = profile.profile?.latitude !== null && profile.profile?.latitude !== undefined && profile.profile?.longitude !== null && profile.profile?.longitude !== undefined;
-    const coords = await acquireCoords() || (hasSavedCoords && Number.isFinite(Number(profile.profile.latitude)) && Number.isFinite(Number(profile.profile.longitude))
-      ? { latitude: Number(profile.profile.latitude), longitude: Number(profile.profile.longitude) }
-      : null);
-    const queryParams = coords ? `?latitude=${coords.latitude}&longitude=${coords.longitude}` : '';
-
-    const [donationsResult, historyResult, rewardsResult] = await Promise.allSettled([
-      request(`/api/ngo/donations${queryParams}`),
+    const [donationsResult, historyResult, rewardsResult, profileResult] = await Promise.allSettled([
+      request('/api/ngo/donations'),
       request('/api/ngo/history'),
-      request('/api/rewards/my-points')
+      request('/api/rewards/my-points'),
+      fetchProfile('/api/ngo/profile')
     ]);
+    if (profileResult.status === 'fulfilled') {
+      setValues(profileResult.value.profile);
+      const welcomeName = $('[data-api-value="fullName"]');
+      if (welcomeName) welcomeName.textContent = profileResult.value.profile?.full_name || profileResult.value.profile?.ngo_name || 'NGO Partner';
+    }
     const ptsEl = document.querySelector('[data-metric="my-points"]');
     const badgeEl = document.querySelector('[data-metric="my-badge"]');
     const donations = donationsResult.status === 'fulfilled' ? donationsResult.value : null;
@@ -312,6 +295,10 @@ export const initNgoDashboard = async () => {
     }
     if (rewardsResult.status === 'rejected' && donationsResult.status !== 'rejected' && historyResult.status !== 'rejected') {
       notifyError(rewardsResult.reason);
+    }
+    if (profileResult.status === 'rejected' && donationsResult.status !== 'rejected') {
+      const locationStatus = $('#ngo-location-status');
+      if (locationStatus) locationStatus.textContent = 'Set your NGO city or location to improve match ranking.';
     }
 
     // Available Donations Card Renderer
