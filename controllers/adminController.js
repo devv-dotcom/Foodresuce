@@ -1,37 +1,31 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const pool = require('../config/database');
 const Admin = require('../models/Admin');
-const User = require('../models/User');
 const ActivityLog = require('../models/ActivityLog');
 const Donation = require('../models/Donation');
-const { sendLoginOtp } = require('../utils/mail');
 
 const tokenFor = admin => jwt.sign({ sub: admin.id, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 const page = query => ({ limit: Math.min(Math.max(Number(query.limit) || 20, 1), 100), offset: Math.max(Number(query.offset) || 0, 0) });
 const log = (req, action, entityType, entityId, details) => ActivityLog.create({ actorUserId: req.user.id, action, entityType, entityId, details, ipAddress: req.ip });
-const otpHash = otp => crypto.createHash('sha256').update(otp).digest('hex');
 
 exports.login = async (req, res, next) => {
   try {
-    const admin = await Admin.findByEmail(req.body.email);
-    if (!admin || admin.account_status !== 'active' || !(await bcrypt.compare(req.body.password, admin.password))) return res.status(401).json({ success: false, message: 'Invalid administrator email or password.' });
-    const otp = crypto.randomInt(100000, 1000000).toString();
-    await User.saveLoginOtp(admin.email, otpHash(otp), new Date(Date.now() + Number(process.env.LOGIN_OTP_TTL_MS || 10 * 60 * 1000)));
-    try {
-      await sendLoginOtp({ email: admin.email, fullName: admin.full_name, otp });
-    } catch (mailError) {
-      await User.clearLoginOtp(admin.id);
-      console.error('Administrator OTP delivery failed.', { code: mailError.code || 'MAIL_DELIVERY_FAILED' });
-      return res.status(503).json({ success: false, message: 'We could not deliver a sign-in code. Please try again later.' });
+    const configuredEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+    const submittedEmail = String(req.body.email || '').trim().toLowerCase();
+    if (!configuredEmail) {
+      return res.status(503).json({ success: false, message: 'Administrator sign-in is not configured.' });
     }
-    return res.json({
-      success: true,
-      requiresOtp: true,
-      email: admin.email,
-      message: 'We sent a 6-digit administrator sign-in code to your email.'
-    });
+    if (submittedEmail !== configuredEmail) {
+      return res.status(401).json({ success: false, message: 'Invalid administrator email or password.' });
+    }
+
+    const admin = await Admin.findByEmail(configuredEmail);
+    if (!admin || admin.account_status !== 'active' || !(await bcrypt.compare(req.body.password, admin.password))) return res.status(401).json({ success: false, message: 'Invalid administrator email or password.' });
+    await Admin.updateLastLogin(admin.admin_id);
+    await ActivityLog.create({ actorUserId: admin.id, action: 'admin_login', entityType: 'admin', entityId: admin.admin_id, ipAddress: req.ip });
+    const user = { id: admin.id, name: admin.full_name, email: admin.email, role: 'admin' };
+    return res.json({ success: true, message: 'Admin login successful.', token: tokenFor(admin), user });
   } catch (error) { next(error); }
 };
 

@@ -3,7 +3,7 @@ const pool = require('../config/database');
 
 async function seedAdminAccount() {
   try {
-    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
     const adminPass = process.env.ADMIN_PASSWORD;
     if (!adminEmail || !adminPass) {
       console.warn('[Admin Seed] Skipped: ADMIN_EMAIL and ADMIN_PASSWORD must be configured to provision an administrator.');
@@ -34,7 +34,7 @@ async function seedAdminAccount() {
     
     let userId = null;
     if (existingUsers.length === 0) {
-      const hashedPassword = await bcrypt.hash(adminPass, 10);
+      const hashedPassword = await bcrypt.hash(adminPass, 12);
       const [insertUser] = await pool.execute(
         `INSERT INTO users (full_name, email, mobile, password, role, address, city, state, pincode, is_verified, created_at)
          VALUES (?, ?, ?, ?, 'admin', ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)`,
@@ -45,16 +45,19 @@ async function seedAdminAccount() {
       console.log(`[Admin Seed] Created default admin user: ${adminEmail}`);
     } else {
       userId = existingUsers[0].id;
+      const hashedPassword = await bcrypt.hash(adminPass, 12);
       await pool.execute(
         `UPDATE users
          SET role = 'admin',
+             email = ?,
+             password = ?,
              mobile = COALESCE(NULLIF(mobile, ''), ?),
              address = COALESCE(NULLIF(address, ''), ?),
              city = COALESCE(NULLIF(city, ''), ?),
              state = COALESCE(NULLIF(state, ''), ?),
              pincode = COALESCE(NULLIF(pincode, ''), ?)
          WHERE id = ?`,
-        [adminProfile.mobile, adminProfile.address, adminProfile.city,
+        [adminEmail, hashedPassword, adminProfile.mobile, adminProfile.address, adminProfile.city,
           adminProfile.state, adminProfile.pincode, userId]
       );
     }

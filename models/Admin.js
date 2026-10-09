@@ -6,7 +6,7 @@ module.exports = {
   async findByEmail(email) {
     const [rows] = await pool.execute(
       `SELECT a.id AS admin_id, a.account_status, u.id, u.full_name, u.email, u.password, u.role
-       FROM admins a JOIN users u ON u.id = a.user_id WHERE u.email = ? AND u.role = 'admin' LIMIT 1`, [email]
+       FROM admins a JOIN users u ON u.id = a.user_id WHERE LOWER(u.email) = LOWER(?) AND u.role = 'admin' LIMIT 1`, [email]
     );
     return rows[0] || null;
   },

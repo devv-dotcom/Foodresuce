@@ -16,6 +16,6 @@ Food Rescue/
 
 ## Email sign-in codes
 
-Donor, NGO, and administrator sign-ins require a one-time email code after the password is accepted. Codes expire after 10 minutes by default (`LOGIN_OTP_TTL_MS=600000`) and are single-use. Configure the `MAIL_*` settings from `.env.example` in `backend/.env` before running in production; production sign-in fails closed if the email cannot be delivered. Non-production environments return a generated `devOtp` to the local client for testing. Fixed OTP bypass codes are not supported.
+Donor and NGO sign-ins require a one-time email code after the password is accepted. Codes expire after 10 minutes by default (`LOGIN_OTP_TTL_MS=600000`) and are single-use. Admin sign-in accepts only the configured `ADMIN_EMAIL` and `ADMIN_PASSWORD`, is rate-limited, and does not use OTP. Configure these values in the deployment environment; the admin seed synchronizes that account on startup. Configure email delivery using the provider settings in `.env.example`.
 
 <!-- Last pushed: 2026-08-20 12:15:15 -->

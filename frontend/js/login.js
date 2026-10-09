@@ -110,7 +110,6 @@ if (token && user?.role && params.has('autoredirect')) {
 const DEMO_ACCOUNTS = {
   restaurant: { email: 'bistro@test.com', password: 'Password@123', role: 'restaurant' },
   ngo:        { email: 'devv305399@gmail.com', password: 'Password@123', role: 'ngo' },
-  admin:      { email: 'admin@foodbridge.org', password: 'Admin@123', role: 'admin' },
 };
 
 function selectRole(roleName) {
