@@ -13,7 +13,7 @@ exports.getProfile = async (req, res, next) => {
       const [rows] = await pool.execute(`SELECT is_verified, account_status FROM ngos WHERE user_id = ? LIMIT 1`, [user.id]);
       if (rows[0]) {
         isVerified = Boolean(rows[0].is_verified);
-        isActive = rows[0].account_status === 'active';
+        isActive = !['rejected', 'suspended'].includes(rows[0].account_status);
       }
     }
 

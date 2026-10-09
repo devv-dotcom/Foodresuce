@@ -141,17 +141,26 @@ document.addEventListener('click', async event => {
 export const initBusinessDashboard = async () => {
   if (!document.body.matches('[data-dashboard="business"]')) return;
   try {
-    const [dashboard, donations, rewards] = await Promise.all([
+    const [dashboardResult, donationsResult, rewardsResult] = await Promise.allSettled([
       request('/api/business/dashboard'),
       request('/api/business/donations'),
       request('/api/rewards/my-points').catch(error => { notifyError(error); return null; })
     ]);
 
-    setValues(dashboard.dashboard);
+    if (dashboardResult.status === 'fulfilled') setValues(dashboardResult.value.dashboard);
+    else notifyError(dashboardResult.reason);
 
     // Set Impact Points & Badge
     const ptsEl = document.querySelector('[data-metric="my-points"]');
     const badgeEl = document.querySelector('[data-metric="my-badge"]');
+    if (donationsResult.status === 'rejected') {
+      const history = $('#donation-history');
+      if (history) history.textContent = 'Your donation history could not be loaded. Please refresh and try again.';
+      notifyError(donationsResult.reason);
+      return;
+    }
+    const donations = donationsResult.value;
+    const rewards = rewardsResult.status === 'fulfilled' ? rewardsResult.value : null;
     if (ptsEl) ptsEl.textContent = rewards ? `${rewards.points || 0} pts` : '—';
     if (badgeEl) badgeEl.textContent = rewards?.badge || '—';
 

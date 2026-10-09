@@ -12,7 +12,7 @@ module.exports = {
   },
 
   async create(connection, userId, data) {
-    const [result] = await connection.execute('INSERT INTO ngos (user_id, ngo_name, registration_number) VALUES (?, ?, ?)', [userId, data.ngoName, data.registrationNumber || null]);
+    const [result] = await connection.execute("INSERT INTO ngos (user_id, ngo_name, registration_number, account_status) VALUES (?, ?, ?, 'active')", [userId, data.ngoName, data.registrationNumber || null]);
     await connection.execute('INSERT INTO ngo_profiles (ngo_id, mission, service_area) VALUES (?, ?, ?)', [result.insertId, data.mission || null, data.serviceArea || null]);
     return result.insertId;
   },

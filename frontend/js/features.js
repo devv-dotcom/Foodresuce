@@ -33,6 +33,8 @@ export const initNotifications = async () => {
   const bell = $('[data-notification-bell]');
   const list = $('[data-notification-list]');
   const drawer = $('[data-notification-drawer]');
+  const summary = $('[data-notification-summary]');
+  const markAllButton = $('[data-notification-read-all]');
   if (!getSession().token) return;
 
   const refresh = async () => {
@@ -57,20 +59,29 @@ export const initNotifications = async () => {
         badge.style.display = unread > 0 ? 'inline-block' : 'none';
       }
 
+      if (summary) summary.textContent = unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : 'You’re all caught up';
+      if (markAllButton) markAllButton.disabled = unread === 0;
+
       if (list) {
         renderList(list, rows.slice(0, 10), row => {
           const item = document.createElement('li');
           item.className = `notification-item ${row.is_read ? 'read' : 'unread'}`;
+          item.tabIndex = 0;
+          item.setAttribute('role', 'button');
+          const icon = ({ NEW_DONATION: '🍲', ASSIGNMENT_CREATED: '🚚', PICKUP_REMINDER: '⏰', DELIVERY_REMINDER: '📦', IMPACT_UPDATE: '🌱' })[row.type] || '🔔';
+          const createdAt = new Date(row.created_at);
+          const timestamp = Number.isNaN(createdAt.getTime()) ? '' : createdAt.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
           item.innerHTML = `
-            <div>
-              <strong>${escapeHtml(row.title)}</strong>
-              <p>${escapeHtml(row.message)}</p>
-              <small>${new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
+            <span class="notification-item-icon" aria-hidden="true">${icon}</span>
+            <div class="notification-item-content">
+              <strong>${escapeHtml(row.title || 'Food Rescue update')}</strong>
+              <p>${escapeHtml(row.message || '')}</p>
+              <small>${escapeHtml(timestamp)}</small>
             </div>
           `;
-          item.addEventListener('click', async () => {
+          const markRead = async () => {
             if (!row.is_read) {
-              try { await request(`/api/notifications/${row.id}/read`, { method: 'PUT' }); }
+              try { await request(`/api/notifications/${encodeURIComponent(row.id)}/read`, { method: 'PATCH' }); }
               catch (error) { return notifyError(error); }
               row.is_read = true;
               item.classList.remove('unread');
@@ -88,9 +99,13 @@ export const initNotifications = async () => {
                 donationAction?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }
             }
+          };
+          item.addEventListener('click', markRead);
+          item.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); markRead(); }
           });
           return item;
-        }, 'No new notifications.');
+        }, '<li class="notification-empty">No updates right now. New food listings and pickup activity will appear here.</li>');
       }
     } catch (error) {
       if (error.status !== 401 && error.status !== 403) {
@@ -104,6 +119,13 @@ export const initNotifications = async () => {
       drawer.classList.toggle('active');
     });
   }
+
+  markAllButton?.addEventListener('click', async () => {
+    try {
+      await request('/api/notifications/read-all', { method: 'PATCH' });
+      await refresh();
+    } catch (error) { notifyError(error); }
+  });
 
   await refresh();
   window.setInterval(refresh, 12000); // 12 seconds live poll

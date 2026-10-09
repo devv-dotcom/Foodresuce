@@ -94,8 +94,8 @@ exports.createDonation = async (req, res, next) => {
       });
     }
 
-    await connection.commit();
     const createdDonation = enrichWithCountdown(await Donation.findById(donationId));
+    await connection.commit();
     return res.status(201).json({ success: true, message: 'Donation published. Donor food-handling declarations were recorded.', donation: createdDonation });
   } catch (error) {
     if (connection) {

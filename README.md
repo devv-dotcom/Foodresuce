@@ -37,7 +37,6 @@ For development auto-restart, run `npm run dev`.
 Donors can create, edit, and cancel unclaimed listings. Cancellation is retained in donation history. NGOs can browse and accept available donations, then confirm completion. Listings store pickup details, donor-reported storage conditions, and food-handling declarations. Timing estimates only show deadlines and urgency; they do not establish food safety.
 
 New-donation alerts are persisted in MySQL for active NGOs with saved coordinates inside `NGO_MATCH_RADIUS_KM` (35 km by default). Donors and NGOs can set coordinates by choosing **Use current location** during registration; notifications are polled from the authenticated API and remain available when the recipient is offline.
-
 ## Environment variables
 
 See `.env.example` for the complete list. Required settings include:

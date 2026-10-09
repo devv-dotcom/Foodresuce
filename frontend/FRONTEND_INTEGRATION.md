@@ -13,7 +13,7 @@ Use the Express server for local work (`npm start` from the repository root). Op
 
 ## Authentication
 
-The normal sign-in form accepts donor and NGO roles. Donor and NGO sign-ins require an email code. The separate admin page uses the configured admin email/password and does not use OTP. NGO registration creates a pending application and does not establish a session until an administrator approves it. OAuth providers are not implemented.
+The normal sign-in form accepts donor and NGO roles. Donor and NGO registration activates accounts immediately and establishes a session without administrator approval. The separate admin page uses the configured admin email/password and does not use OTP. OAuth providers are not implemented.
 
 The browser stores the access token and user payload in local storage. `api.js` adds the bearer token and normalizes JSON errors. Sensitive API operations must continue to enforce authorization in Express routes and controllers; frontend route guards are only a navigation aid.
 

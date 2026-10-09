@@ -436,7 +436,12 @@ async function loadDonations() {
     state.donations = res.donations || [];
     cacheToLocal('partner_donations', state.donations);
   } catch (_) {
-    state.donations = getFromLocal('partner_donations') || getDemoDonations();
+    const cached = getFromLocal('partner_donations') || [];
+    // Never present sample/demo food as live donor listings when the API is down.
+    state.donations = cached.filter(d =>
+      !String(d.id).startsWith('DEMO-') &&
+      (!d.expiryTime || new Date(d.expiryTime).getTime() > Date.now())
+    );
   }
 
   const filtered = filterDonations();
@@ -546,8 +551,9 @@ function buildDonationDetailHTML(d) {
   if (!d) return `<div class="p-error-state">Could not load donation details.</div>`;
   const pct = d.smartMatch?.matchScore || 0;
   return `
-    <img src="${esc(d.images?.[0] || d.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop')}"
-         style="width:100%; height:200px; object-fit:cover; border-radius:14px; margin-bottom:16px;" alt="${esc(d.foodName)}">
+    ${(d.images?.[0] || d.imageUrl)
+      ? `<img src="${esc(d.images?.[0] || d.imageUrl)}" style="width:100%; height:200px; object-fit:cover; border-radius:14px; margin-bottom:16px;" alt="${esc(d.foodName)}">`
+      : `<div class="p-empty-photo">No food photo was provided</div>`}
 
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
       <h3 style="font-size:1.1rem; font-weight:800;">${esc(d.foodName)}</h3>
@@ -572,17 +578,12 @@ function buildDonationDetailHTML(d) {
     <h4 style="font-size:.85rem; font-weight:800; color:#0f172a; margin-bottom:8px; text-transform:uppercase; letter-spacing:.04em;">📍 Pickup Details</h4>
     <div style="padding:12px 14px; background:#fff7ed; border-radius:12px; border:1px solid #ffedd5; margin-bottom:14px; font-size:.83rem;">
       <div><strong>Donor:</strong> ${esc(d.donor?.name || d.donorName || '—')}</div>
-      <div><strong>Contact:</strong> ${esc(d.donor?.phone || '—')}</div>
+      ${d.donor?.phone ? `<div><strong>Contact:</strong> ${esc(d.donor.phone)}</div>` : ''}
       <div><strong>Address:</strong> 📍 ${esc(d.donor?.pickupAddress || d.donorAddress || '—')}</div>
       <div><strong>Distance:</strong> 🚗 ~${d.donor?.distanceKm || d.distanceKm || '—'} km away</div>
     </div>
 
-    <h4 style="font-size:.85rem; font-weight:800; color:#0f172a; margin-bottom:8px; text-transform:uppercase; letter-spacing:.04em;">🏛️ Distribution Details</h4>
-    <div style="padding:12px 14px; background:#f0fdf4; border-radius:12px; border:1px solid #a7f3d0; font-size:.83rem;">
-      <div><strong>Location:</strong> ${esc(d.delivery?.destinationName || 'St. Jude Community Kitchen')}</div>
-      <div><strong>Address:</strong> ${esc(d.delivery?.address || 'To be assigned')}</div>
-      <div><strong>Contact:</strong> ${esc(d.delivery?.contactPhone || '—')}</div>
-    </div>`;
+    <p class="p-donation-note">Distribution arrangements are coordinated after an NGO accepts the listing.</p>`;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -600,7 +601,7 @@ window.openAcceptConfirm = function(id) {
           <div>📦 Quantity: <strong>${esc(d.quantity || '—')}</strong></div>
           <div>📍 Pickup: <strong>${esc(d.donorAddress || '—')}</strong></div>
           <div>🚗 Distance: <strong>~${d.distanceKm || '—'} km</strong></div>
-          <div>🏛️ Destination: <strong>Community Distribution Center</strong></div>
+          <div>🏛️ Destination: <strong>Coordinated after acceptance</strong></div>
         </div>
       </div>
       <p style="font-size:.78rem; color:#6b7280; margin-top:10px;">By confirming, you commit to collecting this food and delivering it to the distribution point.</p>
@@ -1334,7 +1335,7 @@ function notifIconBg(type) {
 
 window.markNotifRead = async function(id) {
   try {
-    await request(`/api/notifications/${id}/read`, { method: 'PATCH' });
+    await request(`/api/partner/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
     loadNotifications();
   } catch (error) {
     toast(error.message || 'Unable to mark this notification as read.', 'error');
@@ -1343,7 +1344,7 @@ window.markNotifRead = async function(id) {
 
 document.getElementById('btn-mark-all-read')?.addEventListener('click', async () => {
   try {
-    await request('/api/notifications/read-all', { method: 'PATCH' });
+    await request('/api/partner/notifications/read-all', { method: 'PATCH' });
     toast('All notifications marked as read.');
     loadNotifications();
   } catch (error) {
@@ -1474,40 +1475,3 @@ function getFromLocal(key) {
 ════════════════════════════════════════════════════════════════════ */
 function showEl(id) { const el = $(`#${id}`); if (el) el.style.display = ''; }
 function hideEl(id) { const el = $(`#${id}`); if (el) el.style.display = 'none'; }
-
-/* ═══════════════════════════════════════════════════════════════════
-   DEMO FALLBACK DONATIONS (if backend unavailable)
-════════════════════════════════════════════════════════════════════ */
-function getDemoDonations() {
-  const now = Date.now();
-  return [
-    {
-      id: 'DEMO-001', foodName: '50 Meal Boxes (Vegetarian Thali)', category: 'Cooked Meals',
-      quantity: '50 boxes', numberOfMeals: 50, donorName: 'The Spice Garden Restaurant', donorAddress: '142 Main Street, Downtown',
-      distanceKm: 1.8, postedTime: new Date(now - 1800000).toISOString(), expiryTime: new Date(now + 5400000).toISOString(),
-      isVegetarian: true, imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&auto=format&fit=crop',
-      smartMatch: { matchScore: 94, matchExplanation: 'Recommended because you are 1.8 km away and available for pickup.' }
-    },
-    {
-      id: 'DEMO-002', foodName: 'Artisan Bread & Croissant Pack', category: 'Bakery',
-      quantity: '35 kg (90 items)', numberOfMeals: 40, donorName: 'Golden Crust Bakery', donorAddress: '88 Park Avenue, North District',
-      distanceKm: 3.2, postedTime: new Date(now - 3600000).toISOString(), expiryTime: new Date(now + 14400000).toISOString(),
-      isVegetarian: true, imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&auto=format&fit=crop',
-      smartMatch: { matchScore: 88, matchExplanation: 'Matches your transport capacity and route radius.' }
-    },
-    {
-      id: 'DEMO-003', foodName: 'Fresh Vegetable Box — Assorted', category: 'Fresh Produce',
-      quantity: '60 kg', numberOfMeals: 120, donorName: 'City Farmers Market', donorAddress: '20 Market Lane, East Side',
-      distanceKm: 4.5, postedTime: new Date(now - 900000).toISOString(), expiryTime: new Date(now + 86400000).toISOString(),
-      isVegetarian: true, imageUrl: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop',
-      smartMatch: { matchScore: 82, matchExplanation: 'Nearby produce donation within your service radius.' }
-    },
-    {
-      id: 'DEMO-004', foodName: 'Catered Event Leftover Meals', category: 'Cooked Meals',
-      quantity: '80 portions', numberOfMeals: 80, donorName: 'Grand Banquet Hall', donorAddress: '5 Convention Rd, West End',
-      distanceKm: 6.1, postedTime: new Date(now - 600000).toISOString(), expiryTime: new Date(now + 2700000).toISOString(),
-      isVegetarian: false, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&auto=format&fit=crop',
-      smartMatch: { matchScore: 76, matchExplanation: '6.1 km away. Act fast — expiring in ~45 minutes.' }
-    }
-  ];
-}

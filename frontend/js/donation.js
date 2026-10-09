@@ -101,7 +101,7 @@ export const initDonationIntegration = () => {
       setLoading(submit, true, editingDonationId ? 'Saving changes…' : 'Submitting donation…');
       const response = editingDonationId
         ? await request(`/api/donations/${editingDonationId}`, { method: 'PUT', body: data, timeoutMs: 60000 })
-        : await request('/api/donations', { method: 'POST', body: data, timeoutMs: 60000 });
+        : await createDonation(data);
       const wasEditing = Boolean(editingDonationId);
       toast(wasEditing ? 'Donation updated successfully.' : 'Donation submitted successfully!', 'success');
       resetEditor();
@@ -249,4 +249,8 @@ export const initDonationIntegration = () => {
     resetEditor();
     showEditor();
   });
+
+  if ($('#donation-results')) {
+    loadDonations().catch(notifyError);
+  }
 };

@@ -10,6 +10,8 @@ router.use(authenticate, authorizeRoles('ngo', 'admin'), requireActiveAccount);
 
 router.get('/dashboard', controller.getDashboard);
 router.get('/notifications', controller.getNotifications);
+router.patch('/notifications/read-all', controller.markAllNotificationsRead);
+router.patch('/notifications/:id/read', controller.markNotificationRead);
 
 router.get('/donations', controller.getDonations);
 router.get('/donations/:id', controller.getDonationById);

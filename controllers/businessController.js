@@ -5,7 +5,6 @@ const User = require('../models/User');
 const Business = require('../models/Business');
 const BusinessProfile = require('../models/BusinessProfile');
 const BusinessImage = require('../models/BusinessImage');
-const Donation = require('../models/Donation');
 
 const buildProfile = async userId => {
   const [user, profile, images] = await Promise.all([

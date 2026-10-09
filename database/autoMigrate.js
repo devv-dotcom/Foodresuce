@@ -88,12 +88,19 @@ async function runAutoMigration() {
       // Automated workflow notifications have no admin actor.
       await connection.query(`ALTER TABLE notifications MODIFY COLUMN created_by BIGINT UNSIGNED NULL`);
 
-      // New NGO registrations require an administrator approval. Existing
-      // account states are retained; only the schema default changes.
+      // NGOs and donor/business accounts are active immediately without
+      // administrator approval. Activate existing accounts during deployment.
       try {
-        await connection.query("ALTER TABLE ngos MODIFY COLUMN account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'pending'");
+        await connection.query("ALTER TABLE ngos MODIFY COLUMN account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'active'");
+        await connection.query("UPDATE ngos SET account_status = 'active' WHERE account_status <> 'active'");
       } catch (err) {
-        console.warn('[MIGRATION] Could not update the NGO verification default:', err.message);
+        console.warn('[MIGRATION] Could not activate existing NGO accounts:', err.message);
+      }
+      try {
+        await connection.query("ALTER TABLE business_profiles MODIFY COLUMN account_status ENUM('active', 'suspended', 'pending', 'rejected') NOT NULL DEFAULT 'active'");
+        await connection.query("UPDATE business_profiles SET account_status = 'active' WHERE account_status <> 'active'");
+      } catch (err) {
+        console.warn('[MIGRATION] Could not activate existing donor/business accounts:', err.message);
       }
 
       await connection.query(`CREATE TABLE IF NOT EXISTS donation_conversations (

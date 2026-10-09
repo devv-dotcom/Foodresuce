@@ -44,7 +44,7 @@ exports.register = async (req, res, next) => {
     if (BUSINESS_ROLES.includes(role)) {
       await connection.execute(
         `INSERT INTO business_profiles (user_id, business_name, business_type, account_status)
-         VALUES (?, ?, ?, 'pending')
+         VALUES (?, ?, ?, 'active')
          ON DUPLICATE KEY UPDATE business_name = VALUES(business_name), business_type = VALUES(business_type)`,
         [userId, req.body.businessName || req.body.fullName, role]
       );
@@ -54,12 +54,7 @@ exports.register = async (req, res, next) => {
     const user = await User.findPublicById(userId);
     const token = signAccessToken(user);
 
-    const isBusiness = BUSINESS_ROLES.includes(role);
-    const message = isBusiness 
-      ? 'Registration successful. Your business account is pending Admin approval.'
-      : 'Registration successful.';
-
-    return res.status(201).json({ success: true, message, token, user: serializeUser(user) });
+    return res.status(201).json({ success: true, message: 'Registration successful. Your account is active.', token, user: serializeUser(user) });
   } catch (error) {
     await connection.rollback();
     next(error);
@@ -77,7 +72,6 @@ exports.login = async (req, res, next) => {
     if (BUSINESS_ROLES.includes(user.role)) {
       const [rows] = await pool.execute('SELECT account_status FROM business_profiles WHERE user_id = ? LIMIT 1', [user.id]);
       const status = rows[0]?.account_status || 'active';
-      if (status === 'pending') return res.status(403).json({ success: false, message: 'Your business account is pending Admin approval.' });
       if (status === 'rejected') return res.status(403).json({ success: false, message: 'Your business account application was rejected.' });
       if (status === 'suspended') return res.status(403).json({ success: false, message: 'Your business account has been suspended.' });
     }

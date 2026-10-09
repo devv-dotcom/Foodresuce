@@ -12,11 +12,6 @@ let state = {
     { id: 'FB-9406', donor: 'Corner Delicatessen', foodName: 'Sandwiches & Salads', category: 'Cooked Meals', quantity: '25 kg (60 meals)', location: 'North District', postedDate: '2026-08-25 18:00', freshness: 0, expiryText: 'Expired', assignedNgo: 'None', status: 'expired' },
     { id: 'FB-9407', donor: 'Bistro 44', foodName: 'Roasted Vegetables', category: 'Cooked Meals', quantity: '30 kg (75 meals)', location: 'West Suburbs', postedDate: '2026-08-25 19:30', freshness: 0, expiryText: 'Cancelled by Donor', assignedNgo: 'None', status: 'cancelled' }
   ],
-  pendingNgos: [
-    { id: 'ngo-pending-1', name: 'St. Jude Community Kitchen', contactPerson: 'Rev. Thomas Miller', email: 'thomas@stjude-kitchen.org', phone: '+1 555-0192', location: 'Downtown', taxId: 'TAX-8849201', regDate: '2026-08-25' },
-    { id: 'ngo-pending-2', name: 'Hope Pantry Foundation', contactPerson: 'Maria Rodriguez', email: 'maria@hopepantry.org', phone: '+1 555-0381', location: 'East Side', taxId: 'TAX-4491029', regDate: '2026-08-26' },
-    { id: 'ngo-pending-3', name: 'Nourish All Relief Org', contactPerson: 'David Chen', email: 'd.chen@nourishall.org', phone: '+1 555-0472', location: 'North District', taxId: 'TAX-9920148', regDate: '2026-08-26' }
-  ],
   ngos: [
     { id: 'ngo-1', name: 'Hope Haven Shelter', contactPerson: 'Elena Vance', email: 'elena@hopehaven.org', phone: '+1 555-1122', location: 'Downtown', status: 'verified', claimedCount: 142, regDate: '2025-11-14' },
     { id: 'ngo-2', name: 'Community Kitchen NGO', contactPerson: 'James Peterson', email: 'jp@communitykitchen.org', phone: '+1 555-3344', location: 'West Suburbs', status: 'verified', claimedCount: 310, regDate: '2025-06-20' },
@@ -43,11 +38,11 @@ let state = {
   alerts: [
     { id: 'alt-1', priority: 'critical', title: 'Food Donation Expiring Soon', body: 'Donation #FB-9403 (60 kg Curry) has 2 hours left before expiration.', time: '10 mins ago' },
     { id: 'alt-2', priority: 'high', title: 'Pickup Delay Reported', body: 'Partner NGO vehicle delayed in traffic for Pickup #FB-9404.', time: '25 mins ago' },
-    { id: 'alt-3', priority: 'medium', title: 'Pending NGO Verifications', body: '3 new NGO verification requests waiting for review.', time: '1 hour ago' },
+    { id: 'alt-3', priority: 'low', title: 'NGO accounts active', body: 'New NGO partners can join and use the platform immediately.', time: '1 hour ago' },
     { id: 'alt-4', priority: 'low', title: 'Monthly Report Ready', body: 'August 2026 Social Impact Report generated successfully.', time: '4 hours ago' }
   ],
   activityLogs: [
-    { actor: 'Sarah Jenkins (Admin)', action: 'Approved NGO verification for "Hope Haven Shelter"', time: '12 mins ago' },
+    { actor: 'Hope Haven NGO (Partner)', action: 'Joined the Food Rescue network', time: '12 mins ago' },
     { actor: 'Hope Haven NGO (Partner)', action: 'Assigned to Delivery #FB-9401 (Green Bay Bakery)', time: '45 mins ago' },
     { actor: 'System Automation', action: 'Flagged 1 expiring food donation (#FB-9403)', time: '1 hour ago' },
     { actor: 'Sarah Jenkins (Admin)', action: 'Logged in from IP 192.168.1.45 (2FA Verified)', time: '3 hours ago' }
@@ -58,7 +53,7 @@ let state = {
 // demo.  Production always begins empty and is populated from protected APIs.
 const ADMIN_DEMO_MODE = window.FOODBRIDGE_ENABLE_ADMIN_DEMO === true;
 if (!ADMIN_DEMO_MODE) {
-  state = { donations: [], pendingNgos: [], ngos: [], donors: [], volunteers: [], pickups: [], alerts: [], activityLogs: [] };
+  state = { donations: [], ngos: [], donors: [], volunteers: [], pickups: [], alerts: [], activityLogs: [] };
 }
 
 // Initialize Admin Dashboard Interactivity
@@ -71,7 +66,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Render Datasets
   renderAllDonations();
-  renderPendingNgos();
   renderAllNgos();
   renderDonors();
   renderVolunteers();
@@ -241,45 +235,8 @@ window.deleteDonation = async (id) => {
 };
 
 /* ============================================================
-   4. NGO VERIFICATION & MANAGEMENT RENDERING
+   4. NGO & RECEIVER ACCOUNT MANAGEMENT
    ============================================================ */
-function renderPendingNgos() {
-  const tbody = $('#pending-ngo-table-body');
-  const countBadge = $('#pending-ngo-count');
-  const sidebarBadge = $('#sidebar-pending-ngo-badge');
-  const banner = $('#pending-ngo-banner');
-
-  if (countBadge) countBadge.textContent = state.pendingNgos.length;
-  if (sidebarBadge) sidebarBadge.textContent = state.pendingNgos.length;
-  if (banner) banner.style.display = state.pendingNgos.length > 0 ? 'flex' : 'none';
-
-  if (!tbody) return;
-
-  if (state.pendingNgos.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#15803d; font-weight:700;">✓ All NGO verification requests have been processed!</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = state.pendingNgos.map(ngo => `
-    <tr>
-      <td><strong>${escapeHtml(ngo.name)}</strong></td>
-      <td>
-        <strong>${escapeHtml(ngo.contactPerson)}</strong><br>
-        <span style="font-size:0.75rem; color:#64748b;">${escapeHtml(ngo.email)} &bull; ${escapeHtml(ngo.phone)}</span>
-      </td>
-      <td>📍 ${escapeHtml(ngo.location)}</td>
-      <td><code>${escapeHtml(ngo.taxId)}</code></td>
-      <td>${escapeHtml(ngo.regDate)}</td>
-      <td>
-        <div class="action-buttons-group">
-          <button type="button" class="btn-primary-cta" style="height:32px; padding:0 12px; font-size:0.78rem;" onclick="window.approveNgo('${ngo.id}')">✓ Verify</button>
-          <button type="button" class="btn-secondary" style="height:32px; padding:0 12px; font-size:0.78rem;" onclick="window.viewNgoProfileModal('${ngo.id}', true)">Inspect</button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
-}
-
 function renderAllNgos() {
   const tbody = $('#all-ngo-table-body');
   if (!tbody) return;
@@ -326,17 +283,6 @@ function renderAllNgos() {
   `).join('');
 }
 
-window.approveNgo = async (id) => {
-  const pending = state.pendingNgos.find(n => n.id === id);
-  if (pending) {
-    try {
-      await request(`/api/admin/ngo/approve/${encodeURIComponent(id)}`, { method: 'PUT' });
-      await fetchBackendData();
-      toast(`NGO "${pending.name}" has been verified successfully!`, 'success');
-    } catch (error) { notifyError(error); }
-  }
-};
-
 window.toggleNgoStatus = async (id, newStatus) => {
   const ngo = state.ngos.find(n => n.id === id);
   if (ngo) {
@@ -355,9 +301,7 @@ window.viewNgoProfileModal = (id, isPending) => {
   const footer = $('#ngo-profile-modal-footer');
   if (!modal || !body) return;
 
-  const item = isPending 
-    ? state.pendingNgos.find(n => n.id === id) 
-    : state.ngos.find(n => n.id === id);
+  const item = state.ngos.find(n => n.id === id);
 
   if (!item) return;
 
@@ -366,7 +310,7 @@ window.viewNgoProfileModal = (id, isPending) => {
       <div style="width:56px; height:56px; border-radius:50%; background:#ecfdf5; color:#059669; font-size:28px; display:grid; place-items:center;">🏛️</div>
       <div>
         <h3 style="font-size:1.2rem; font-weight:800; color:#0f172a;">${escapeHtml(item.name)}</h3>
-        <span class="status-badge ${item.status || 'pending'}">${escapeHtml(item.status || 'Pending Verification')}</span>
+        <span class="status-badge ${item.status || 'active'}">${escapeHtml(item.status || 'active')}</span>
       </div>
     </div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; background:#f8faf8; padding:16px; border-radius:12px;">
@@ -381,7 +325,6 @@ window.viewNgoProfileModal = (id, isPending) => {
 
   footer.innerHTML = `
     <button type="button" class="btn-secondary modal-close-btn">Close</button>
-    ${isPending ? `<button type="button" class="btn-primary-cta" onclick="window.approveNgo('${item.id}'); $('#modal-ngo-profile').classList.remove('show');">Approve & Verify NGO</button>` : ''}
   `;
 
   modal.classList.add('show');
@@ -682,7 +625,7 @@ function initModalHandlers() {
    ============================================================ */
 function initQuickActionButtons() {
   $('#qa-add-donation')?.addEventListener('click', () => $('#modal-add-donation')?.classList.add('show'));
-  $('#qa-verify-ngo')?.addEventListener('click', () => {
+  $('#qa-manage-ngos')?.addEventListener('click', () => {
     $(`.sidebar-nav .nav-item[data-tab="ngos"]`)?.click();
   });
   $('#qa-manage-users')?.addEventListener('click', () => {
@@ -694,9 +637,6 @@ function initQuickActionButtons() {
   });
   $('#qa-broadcast-notif')?.addEventListener('click', () => $('#modal-broadcast-notif')?.classList.add('show'));
   
-  $('#btn-review-ngos')?.addEventListener('click', () => {
-    $(`.sidebar-nav .nav-item[data-tab="ngos"]`)?.click();
-  });
 }
 
 /* ============================================================

@@ -46,5 +46,5 @@ module.exports = {
       [userId, role]
     );
     return result.affectedRows;
-  }
+  },
 };
