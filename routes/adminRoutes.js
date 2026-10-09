@@ -24,6 +24,7 @@ router.put('/business/activate/:id', admin.activateBusiness);
 router.delete('/business/:id', admin.deleteBusiness);
 
 router.get('/ngos', admin.listNgos);
+router.get('/volunteers', admin.listVolunteers);
 router.put('/ngo/approve/:id', admin.approveNgo);
 router.put('/ngo/reject/:id', admin.rejectNgo);
 router.put('/ngo/suspend/:id', admin.suspendNgo);

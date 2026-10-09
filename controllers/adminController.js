@@ -4,6 +4,7 @@ const pool = require('../config/database');
 const Admin = require('../models/Admin');
 const ActivityLog = require('../models/ActivityLog');
 const Donation = require('../models/Donation');
+const { getAdminEmail } = require('../config/adminConfig');
 
 const tokenFor = admin => jwt.sign({ sub: admin.id, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 const page = query => ({ limit: Math.min(Math.max(Number(query.limit) || 20, 1), 100), offset: Math.max(Number(query.offset) || 0, 0) });
@@ -11,10 +12,10 @@ const log = (req, action, entityType, entityId, details) => ActivityLog.create({
 
 exports.login = async (req, res, next) => {
   try {
-    const configuredEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+    const configuredEmail = getAdminEmail();
     const submittedEmail = String(req.body.email || '').trim().toLowerCase();
-    if (!configuredEmail) {
-      return res.status(503).json({ success: false, message: 'Administrator sign-in is not configured.' });
+    if (!String(process.env.ADMIN_PASSWORD || '').trim()) {
+      return res.status(503).json({ success: false, message: 'Administrator sign-in is not configured. Set ADMIN_PASSWORD in the hosting environment and redeploy.' });
     }
     if (submittedEmail !== configuredEmail) {
       return res.status(401).json({ success: false, message: 'Invalid administrator email or password.' });
@@ -31,6 +32,7 @@ exports.login = async (req, res, next) => {
 
 exports.listBusinesses = async (req, res, next) => { try { return res.json({ success: true, businesses: await Admin.listBusinesses({ q: req.query.q?.trim(), category: req.query.category, ...page(req.query) }) }); } catch (error) { next(error); } };
 exports.listNgos = async (req, res, next) => { try { return res.json({ success: true, ngos: await Admin.listNgos({ q: req.query.q?.trim(), ...page(req.query) }) }); } catch (error) { next(error); } };
+exports.listVolunteers = async (req, res, next) => { try { return res.json({ success: true, volunteers: await Admin.listVolunteers({ q: req.query.q?.trim(), ...page(req.query) }) }); } catch (error) { next(error); } };
 
 const changeAccount = (kind, status, message) => async (req, res, next) => {
   const connection = await pool.getConnection();

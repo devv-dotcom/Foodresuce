@@ -1,12 +1,13 @@
 const bcrypt = require('bcrypt');
 const pool = require('../config/database');
+const { getAdminEmail } = require('../config/adminConfig');
 
 async function seedAdminAccount() {
   try {
-    const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
-    const adminPass = process.env.ADMIN_PASSWORD;
-    if (!adminEmail || !adminPass) {
-      console.warn('[Admin Seed] Skipped: ADMIN_EMAIL and ADMIN_PASSWORD must be configured to provision an administrator.');
+    const adminEmail = getAdminEmail();
+    const adminPass = String(process.env.ADMIN_PASSWORD || '');
+    if (!adminPass.trim()) {
+      console.warn('[Admin Seed] Skipped: ADMIN_PASSWORD must be configured to provision the administrator.');
       return;
     }
     const adminName = 'System Administrator';
