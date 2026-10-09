@@ -115,8 +115,22 @@ exports.browseDonations = async (req, res, next) => {
     const hasLatitude = req.query.latitude !== undefined;
     const hasLongitude = req.query.longitude !== undefined;
     if (hasLatitude !== hasLongitude) return res.status(422).json({ success: false, message: 'Provide both latitude and longitude for nearby food discovery.' });
-    const [ngoRows] = await pool.execute('SELECT city, pincode, latitude, longitude FROM users WHERE id = ? AND role = \'ngo\' LIMIT 1', [req.user.id]);
-    const ngo = ngoRows[0] || null;
+    // Location improves ranking only. Older databases can be missing one of
+    // the additive coordinate columns, so a profile lookup must never take
+    // the available-food feed down with it.
+    let ngo = null;
+    try {
+      const [ngoRows] = await pool.execute('SELECT city, pincode, latitude, longitude FROM users WHERE id = ? AND role = \'ngo\' LIMIT 1', [req.user.id]);
+      ngo = ngoRows[0] || null;
+    } catch (error) {
+      console.warn('[NGO feed] Could not read saved location; returning food without location ranking.', error.code || 'LOCATION_LOOKUP_FAILED');
+      try {
+        const [ngoRows] = await pool.execute('SELECT city, pincode FROM users WHERE id = ? AND role = \'ngo\' LIMIT 1', [req.user.id]);
+        ngo = ngoRows[0] || null;
+      } catch (fallbackError) {
+        console.warn('[NGO feed] Could not read NGO locality; returning available food without location ranking.', fallbackError.code || 'LOCALITY_LOOKUP_FAILED');
+      }
+    }
     const candidateLat = ngo?.latitude !== null && ngo?.latitude !== undefined ? Number(ngo.latitude) : null;
     const candidateLon = ngo?.longitude !== null && ngo?.longitude !== undefined ? Number(ngo.longitude) : null;
     const hasSavedCoordinates = Number.isFinite(candidateLat) && Math.abs(candidateLat) <= 90

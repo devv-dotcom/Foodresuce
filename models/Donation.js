@@ -46,8 +46,23 @@ const Donation = {
 
   async list({ where = '', values = [], limit = 20, offset = 0, includeDeleted = false }) {
     const combinedWhere = includeDeleted ? where : (where ? `${where} AND d.deleted_at IS NULL` : 'WHERE d.deleted_at IS NULL');
-    const [rows] = await pool.execute(`${selectDonation} ${combinedWhere} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`, [...values, Number(limit), Number(offset)]);
-    return rows;
+    try {
+      const [rows] = await pool.execute(`${selectDonation} ${combinedWhere} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`, [...values, Number(limit), Number(offset)]);
+      return rows;
+    } catch (error) {
+      // Some production databases predate the soft-delete migration. A
+      // legacy donation deleted by this app is also marked cancelled, so
+      // status-eligible feeds remain safe while the migration is repaired.
+      const isAvailableFeed = /\bd\.status\s*=\s*['"]available['"]/i.test(where);
+      if (includeDeleted || !isAvailableFeed || error.code !== 'ER_BAD_FIELD_ERROR' || !/deleted_at/i.test(error.sqlMessage || '')) throw error;
+      const legacyWhere = combinedWhere
+        .replace(/\s+AND\s+d\.deleted_at\s*=\s*NULL/i, '')
+        .replace(/\s+AND\s+d\.deleted_at\s+IS\s+NULL/i, '')
+        .replace(/^WHERE\s+d\.deleted_at\s+IS\s+NULL\s*$/i, '');
+      const [rows] = await pool.execute(`${selectDonation} ${legacyWhere} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`, [...values, Number(limit), Number(offset)]);
+      console.warn('[Donations] Serving legacy schema while deleted_at migration is pending.');
+      return rows;
+    }
   },
 
   async update(id, businessUserId, data) {
