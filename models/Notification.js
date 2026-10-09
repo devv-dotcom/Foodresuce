@@ -7,12 +7,20 @@ module.exports = {
   },
   async listForUser(userId, role = 'all') {
     const [rows] = await pool.execute(
-      `SELECT n.* FROM notifications n
+      `SELECT n.*, (n.is_read = TRUE) AS is_read FROM notifications n
        WHERE n.recipient_user_id = ? OR (n.recipient_user_id IS NULL AND n.target_role IN (?, 'all'))
        ORDER BY n.created_at DESC LIMIT 30`,
       [userId, role]
     );
     return rows;
+  },
+  async unreadCountForUser(userId, role = 'all') {
+    const [rows] = await pool.execute(
+      `SELECT COUNT(*) AS count FROM notifications n
+       WHERE n.is_read = FALSE AND (n.recipient_user_id = ? OR (n.recipient_user_id IS NULL AND n.target_role IN (?, 'all')))` ,
+      [userId, role]
+    );
+    return Number(rows[0]?.count || 0);
   },
   async create(adminId, data) {
     const [result] = await pool.execute('INSERT INTO notifications (created_by, recipient_user_id, target_role, title, message) VALUES (?, ?, ?, ?, ?)', [adminId, data.recipientUserId || null, data.targetRole || 'all', data.title, data.message]);
@@ -23,6 +31,19 @@ module.exports = {
     const [result] = await pool.execute(
       "UPDATE notifications SET is_read = TRUE WHERE id = ? AND (recipient_user_id = ? OR (recipient_user_id IS NULL AND target_role IN (?, 'all')))",
       [id, userId, role]
+    );
+    if (result.affectedRows) return result.affectedRows;
+    const [rows] = await pool.execute(
+      "SELECT id FROM notifications WHERE id = ? AND (recipient_user_id = ? OR (recipient_user_id IS NULL AND target_role IN (?, 'all'))) LIMIT 1",
+      [id, userId, role]
+    );
+    return rows.length;
+  },
+  async markAllRead(userId, role) {
+    const [result] = await pool.execute(
+      `UPDATE notifications SET is_read = TRUE
+       WHERE is_read = FALSE AND (recipient_user_id = ? OR (recipient_user_id IS NULL AND target_role IN (?, 'all')))` ,
+      [userId, role]
     );
     return result.affectedRows;
   }

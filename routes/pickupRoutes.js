@@ -6,8 +6,8 @@ const { deliveryProofValidation } = require('../middleware/validation');
 
 const router = express.Router();
 
-// Live tracking route accessible to all authenticated users, donors, NGOs, or public tracking
-router.get('/track/:id', controller.trackPickup);
+// Live tracking is private because its response contains contact information.
+router.get('/track/:id', authenticate, requireActiveAccount, controller.trackPickup);
 
 // Volunteer-protected operations
 router.use(authenticate, authorizeRoles('volunteer'), requireActiveAccount);

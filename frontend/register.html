@@ -183,6 +183,13 @@
               <input class="auth-input" style="padding-left:14px;" id="reg-address" name="address" required placeholder="Area / Street address" />
             </div>
 
+            <div class="auth-field">
+              <button type="button" class="auth-input" id="reg-use-location" style="padding-left:14px; cursor:pointer; text-align:left;">📍 Use current location for nearby food matching</button>
+              <input type="hidden" name="latitude" />
+              <input type="hidden" name="longitude" />
+              <small id="reg-location-status" aria-live="polite">Optional. Location is used to match nearby donations and NGOs.</small>
+            </div>
+
 
             <div class="form-grid-2">
               <div class="auth-field">
@@ -207,8 +214,18 @@
       </main>
     </div>
 
-    <script src="js/login.js"></script>
     <script>
+      document.getElementById('reg-use-location')?.addEventListener('click', () => {
+        const status = document.getElementById('reg-location-status');
+        if (!navigator.geolocation) { status.textContent = 'Location is not supported by this browser.'; return; }
+        status.textContent = 'Requesting your location…';
+        navigator.geolocation.getCurrentPosition(position => {
+          document.querySelector('[name="latitude"]').value = position.coords.latitude;
+          document.querySelector('[name="longitude"]').value = position.coords.longitude;
+          status.textContent = 'Location saved for nearby matching.';
+        }, () => { status.textContent = 'Location was not shared. You can still register and add it later.'; }, { timeout: 10000 });
+      });
+
       // Show donor fields by default (Food Donor is the default active role)
       (function initRoleFields() {
         document.getElementById('field-donor-type').style.display = '';

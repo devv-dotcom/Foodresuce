@@ -19,6 +19,13 @@ async function runAutoMigration() {
           console.log(`[MIGRATION] Added ${table}.${column}`);
         }
       };
+      const ensureIndex = async (table, index, definition) => {
+        const [rows] = await connection.query(
+          'SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?',
+          [dbName, table, index]
+        );
+        if (!rows[0].cnt) await connection.query(`ALTER TABLE ${table} ADD ${definition}`);
+      };
 
       // 1. Users table additions
       if (!(await helperCheckColumn('users', 'impact_points'))) {
@@ -66,12 +73,20 @@ async function runAutoMigration() {
         console.log('[MIGRATION] Added pickup_requests live GPS tracking columns');
       }
 
-      // 4. Notifications nullable created_by
-      try {
-        await connection.query(`ALTER TABLE notifications MODIFY COLUMN created_by BIGINT UNSIGNED NULL`);
-      } catch (err) {
-        // Ignored if already modified or constraint prevents
+      // 4. Persisted, recipient-scoped notification metadata and deduplication.
+      const [notificationTableRows] = await connection.query(
+        'SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
+        [dbName, 'notifications']
+      );
+      if (notificationTableRows[0].cnt > 0) {
+        await ensureColumn('notifications', 'notification_type', 'VARCHAR(60) NULL');
+        await ensureColumn('notifications', 'related_donation_id', 'BIGINT UNSIGNED NULL');
+        await ensureColumn('notifications', 'dedupe_key', 'VARCHAR(190) NULL');
+        await ensureIndex('notifications', 'uq_notifications_dedupe_key', 'UNIQUE KEY uq_notifications_dedupe_key (dedupe_key)');
       }
+
+      // Automated workflow notifications have no admin actor.
+      await connection.query(`ALTER TABLE notifications MODIFY COLUMN created_by BIGINT UNSIGNED NULL`);
 
       // New NGO registrations require an administrator approval. Existing
       // account states are retained; only the schema default changes.

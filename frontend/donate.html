@@ -320,7 +320,7 @@
                       </div>
                       <div class="donor-field-group">
                         <label class="donor-label">Pincode</label>
-                        <input name="pincode" class="donor-input" maxlength="20" placeholder="e.g. 500001" />
+                        <input name="pincode" class="donor-input" maxlength="12" placeholder="e.g. 500001" />
                       </div>
                     </div>
 
@@ -364,7 +364,7 @@
                       <span>🛡️</span>
                       <h4>Quick Food Safety Check</h4>
                     </div>
-                    <p style="font-size:13px; color:#166534; margin:0 0 14px;">Please confirm all safety standards before submitting your food donation:</p>
+                    <p style="font-size:13px; color:#166534; margin:0 0 14px;">Record your handling declarations. These are donor-provided details, not an independent safety inspection:</p>
 
                     <div class="donor-checkbox-list">
                       <label class="donor-checkbox-label">
@@ -386,7 +386,7 @@
                     </div>
 
                     <p class="donor-safety-note">
-                      <strong>Note:</strong> We care deeply about food safety. Please donate only food that is fresh, wholesome, and safe to consume.
+                      <strong>Food safety:</strong> Recipients should independently assess food and handling conditions at collection. Timing estimates do not establish that food is safe.
                     </p>
                   </div>
 
@@ -397,6 +397,7 @@
                     <button type="submit" class="donor-btn-primary donor-submit-btn" id="btn-submit-donation" disabled>
                       <span>Submit Food Donation →</span>
                     </button>
+                    <button type="button" class="donor-btn-secondary" id="cancel-donation-edit" hidden style="margin-left:8px;">Cancel edit</button>
                   </div>
                 </form>
               </div>

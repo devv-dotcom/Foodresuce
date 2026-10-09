@@ -235,12 +235,12 @@ exports.updateLocation = async (req, res, next) => {
 exports.trackPickup = async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT pr.id AS pickup_id, pr.status, pr.pickup_address, pr.delivery_address,
+      `SELECT pr.id AS pickup_id, pr.business_id, pr.status, pr.pickup_address, pr.delivery_address,
               pr.current_latitude, pr.current_longitude, pr.last_location_updated_at,
               d.food_name, d.quantity, d.latitude AS donor_latitude, d.longitude AS donor_longitude,
               u_donor.business_name, u_donor.mobile AS donor_phone,
-              n.ngo_name, u_ngo.mobile AS ngo_phone, u_ngo.latitude AS ngo_latitude, u_ngo.longitude AS ngo_longitude,
-              u_vol.full_name AS volunteer_name, u_vol.mobile AS volunteer_phone, v.vehicle_type
+              n.ngo_name, u_ngo.id AS ngo_user_id, u_ngo.mobile AS ngo_phone, u_ngo.latitude AS ngo_latitude, u_ngo.longitude AS ngo_longitude,
+              v.user_id AS volunteer_user_id, u_vol.full_name AS volunteer_name, u_vol.mobile AS volunteer_phone, v.vehicle_type
        FROM pickup_requests pr
        JOIN donations d ON d.id = pr.donation_id
        JOIN users u_donor ON u_donor.id = pr.business_id
@@ -254,6 +254,11 @@ exports.trackPickup = async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ success: false, message: 'Pickup request not found.' });
 
     const data = rows[0];
+    const isAuthorized = req.user?.role === 'admin'
+      || Number(data.business_id) === Number(req.user?.id)
+      || Number(data.ngo_user_id) === Number(req.user?.id)
+      || Number(data.volunteer_user_id) === Number(req.user?.id);
+    if (!isAuthorized) return res.status(403).json({ success: false, message: 'You do not have access to this pickup tracking information.' });
     let distanceKm = null;
     let etaMinutes = null;
     if (data.current_latitude && data.current_longitude && data.ngo_latitude && data.ngo_longitude) {

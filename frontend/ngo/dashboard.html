@@ -183,6 +183,10 @@
           <a href="#active-rescues" style="background:rgba(255,255,255,0.15); color:#fff; font-weight:800; font-size:14px; padding:10px 20px; border-radius:10px; text-decoration:none; border:1px solid rgba(255,255,255,0.25);">
             📦 View Active Rescues
           </a>
+          <button type="button" id="ngo-update-location" style="background:rgba(255,255,255,0.15); color:#fff; font-weight:800; font-size:14px; padding:10px 20px; border-radius:10px; border:1px solid rgba(255,255,255,0.25); cursor:pointer;">
+            📍 Update location for nearby matching
+          </button>
+          <small id="ngo-location-status" aria-live="polite" style="align-self:center;"></small>
         </div>
       </section>
 
@@ -228,6 +232,12 @@
         <div id="available-donations-list">
           <div class="notice">Scanning for surplus food donations in your radius…</div>
         </div>
+      </section>
+
+      <section aria-labelledby="ngo-live-map-title" style="margin-bottom:40px;">
+        <h2 id="ngo-live-map-title" style="font-size:1.35rem; font-weight:800;">Nearby Food Rescue Map</h2>
+        <p id="ngo-map-status" role="status" style="color:#64748b;">Loading available donations near your location…</p>
+        <div data-live-map style="height:360px; width:100%; border-radius:16px; overflow:hidden; border:1px solid #e2e8f0;"></div>
       </section>
 
       <!-- Active Food Rescue Pipeline -->

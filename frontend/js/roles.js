@@ -2,8 +2,7 @@
 export const BUSINESS_ROLES = Object.freeze(['restaurant', 'hotel', 'bakery', 'supermarket', 'catering', 'marriage_hall', 'business', 'donor']);
 export const DASHBOARD_BY_ROLE = Object.freeze({
   admin: '/admin/dashboard.html',
-  ngo: '/partner/dashboard.html',
-  partner: '/partner/dashboard.html',
+  ngo: '/ngo/dashboard.html',
   business: '/business/dashboard.html',
   donor: '/business/dashboard.html',
   restaurant: '/business/dashboard.html',

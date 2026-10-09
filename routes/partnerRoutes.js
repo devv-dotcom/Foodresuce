@@ -5,8 +5,8 @@ const { uploadProofPhoto } = require('../middleware/upload');
 
 const router = express.Router();
 
-// Authorize both NGO and VOLUNTEER roles under the single unified Food Rescue Partner module
-router.use(authenticate, authorizeRoles('ngo', 'volunteer', 'admin'), requireActiveAccount);
+// Legacy partner API remains available to the supported NGO/Admin roles only.
+router.use(authenticate, authorizeRoles('ngo', 'admin'), requireActiveAccount);
 
 router.get('/dashboard', controller.getDashboard);
 router.get('/notifications', controller.getNotifications);

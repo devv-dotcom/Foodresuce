@@ -144,7 +144,7 @@ export const initBusinessDashboard = async () => {
     const [dashboard, donations, rewards] = await Promise.all([
       request('/api/business/dashboard'),
       request('/api/business/donations'),
-      request('/api/rewards/my-points').catch(() => ({ points: 0, badge: 'Bronze Hero' }))
+      request('/api/rewards/my-points').catch(error => { notifyError(error); return null; })
     ]);
 
     setValues(dashboard.dashboard);
@@ -152,8 +152,8 @@ export const initBusinessDashboard = async () => {
     // Set Impact Points & Badge
     const ptsEl = document.querySelector('[data-metric="my-points"]');
     const badgeEl = document.querySelector('[data-metric="my-badge"]');
-    if (ptsEl) ptsEl.textContent = `${rewards.points || 0} pts`;
-    if (badgeEl) badgeEl.textContent = rewards.badge || 'Bronze Hero';
+    if (ptsEl) ptsEl.textContent = rewards ? `${rewards.points || 0} pts` : '—';
+    if (badgeEl) badgeEl.textContent = rewards?.badge || '—';
 
     renderList($('#donation-history'), donations.donations, d => {
       const item = document.createElement('article');
@@ -196,21 +196,39 @@ export const initBusinessDashboard = async () => {
  */
 export const initNgoDashboard = async () => {
   if (!document.body.matches('[data-dashboard="ngo"]')) return;
+  $('#ngo-update-location')?.addEventListener('click', event => {
+    const button = event.currentTarget;
+    const status = $('#ngo-location-status');
+    if (!navigator.geolocation) { if (status) status.textContent = 'Location is not supported by this browser.'; return; }
+    button.disabled = true;
+    if (status) status.textContent = 'Requesting your location…';
+    navigator.geolocation.getCurrentPosition(async position => {
+      try {
+        await request('/api/ngo/location', { method: 'PATCH', body: { latitude: position.coords.latitude, longitude: position.coords.longitude } });
+        if (status) status.textContent = 'Location saved for nearby donation matching.';
+        toast('NGO location updated.');
+      } catch (error) { notifyError(error); if (status) status.textContent = 'Could not save location.'; }
+      finally { button.disabled = false; }
+    }, () => { if (status) status.textContent = 'Location was not shared. Nearby sorting is unavailable until it is set.'; button.disabled = false; }, { timeout: 10000 });
+  }, { once: true });
   try {
-    const coords = await acquireCoords();
-    const queryParams = coords ? `?latitude=${coords.latitude}&longitude=${coords.longitude}&radiusKm=35` : '';
+    const profile = await fetchProfile('/api/ngo/profile');
+    const hasSavedCoords = profile.profile?.latitude !== null && profile.profile?.latitude !== undefined && profile.profile?.longitude !== null && profile.profile?.longitude !== undefined;
+    const coords = await acquireCoords() || (hasSavedCoords && Number.isFinite(Number(profile.profile.latitude)) && Number.isFinite(Number(profile.profile.longitude))
+      ? { latitude: Number(profile.profile.latitude), longitude: Number(profile.profile.longitude) }
+      : null);
+    const queryParams = coords ? `?latitude=${coords.latitude}&longitude=${coords.longitude}` : '';
 
-    const [profile, donations, history, rewards] = await Promise.all([
-      fetchProfile('/api/ngo/profile'),
+    const [donations, history, rewards] = await Promise.all([
       request(`/api/ngo/donations${queryParams}`),
       request('/api/ngo/history'),
-      request('/api/rewards/my-points').catch(() => ({ points: 0, badge: 'Active Partner' }))
+      request('/api/rewards/my-points').catch(error => { notifyError(error); return null; })
     ]);
 
     setValues(profile.profile);
 
     const ptsEl = document.querySelector('[data-metric="my-points"]');
-    if (ptsEl) ptsEl.textContent = `${rewards.points || 0} pts`;
+    if (ptsEl) ptsEl.textContent = rewards ? `${rewards.points || 0} pts` : '—';
 
     const availItems = donations.donations || [];
     const histItems = history.donations || [];
@@ -219,13 +237,15 @@ export const initNgoDashboard = async () => {
     setTxt('count-ngo-available', availItems.length);
     setTxt('count-ngo-active', histItems.filter(d => ['accepted','volunteer_assigned','in_transit'].includes(d.status)).length);
     setTxt('count-ngo-completed', histItems.filter(d => ['delivered','completed'].includes(d.status)).length);
-    const totalImpact = histItems.reduce((sum, d) => sum + (Number(d.number_of_meals) || 25), 0);
+    const totalImpact = histItems.reduce((sum, d) => sum + (Number(d.number_of_meals) || 0), 0);
     setTxt('count-ngo-impact', totalImpact > 0 ? `${totalImpact.toLocaleString()} meals` : '0');
 
     // Available Donations Card Renderer
     const renderAvailableDonation = d => {
       const card = document.createElement('article');
       card.className = `donation-card ${d.is_urgent ? 'urgent-border' : ''}`;
+      const donorDeclarationsComplete = [d.safety_hygiene_confirmed, d.safety_storage_confirmed, d.safety_deadline_confirmed, d.safety_accuracy_confirmed]
+        .every(value => value === true || Number(value) === 1);
       const distBadge = d.distance_km !== null
         ? `<span class="badge-distance">📍 ${d.distance_km} km away</span>`
         : '';
@@ -240,7 +260,7 @@ export const initNgoDashboard = async () => {
             <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
               ${distBadge}
               ${urgentBadge}
-              <span class="badge-verified">🛡️ Safety Verified</span>
+              <span class="badge-declarations">${donorDeclarationsComplete ? 'Donor declarations recorded' : 'Legacy listing · details unavailable'}</span>
             </div>
           </div>
           <span data-expiry-time="${d.expiry_time}">${d.countdown_text || ''}</span>
@@ -248,7 +268,8 @@ export const initNgoDashboard = async () => {
         <p style="margin:6px 0 12px; font-size:.86rem; color:#475549;">
           <strong>Quantity:</strong> ${escapeHtml(d.quantity)} &bull; 
           <strong>Type:</strong> ${escapeHtml(d.food_type === 'veg' ? '🥦 Veg' : '🍗 Non-Veg')} &bull; 
-          <strong>Location:</strong> ${escapeHtml(d.pickup_address || d.city || '')}
+          <strong>Pickup:</strong> ${escapeHtml([d.pickup_address, d.pickup_city || d.business_city || d.city].filter(Boolean).join(', '))}<br>
+          <strong>Storage declared:</strong> ${escapeHtml(d.storage_condition || 'Not recorded')}
         </p>
         <div style="display:flex; gap:8px;">
           <button type="button" class="btn-accept" data-action="accept-donation" data-id="${d.id}">Accept Donation</button>
@@ -298,12 +319,11 @@ export const initNgoDashboard = async () => {
 export const initAdminDashboard = async () => {
   if (!document.body.matches('[data-dashboard="admin"]')) return;
   try {
-    const [dashboard, analytics, businesses, ngos, volunteers] = await Promise.all([
+    const [dashboard, analytics, businesses, ngos] = await Promise.all([
       request('/api/admin/dashboard'),
       request('/api/admin/analytics'),
       request('/api/admin/businesses?limit=5'),
-      request('/api/admin/ngos?limit=5'),
-      request('/api/admin/volunteers?limit=5')
+      request('/api/admin/ngos?limit=5')
     ]);
 
     setValues(dashboard.dashboard);
@@ -331,8 +351,7 @@ export const initAdminDashboard = async () => {
     if (modContainer) {
       const allPending = [
         ...(businesses.businesses || []).map(b => ({ id: b.id, name: b.business_name || b.full_name, role: 'business', status: b.account_status })),
-        ...(ngos.ngos || []).map(n => ({ id: n.id, name: n.ngo_name || n.full_name, role: 'ngo', status: n.account_status })),
-        ...(volunteers.volunteers || []).map(v => ({ id: v.id, name: v.full_name, role: 'volunteer', status: v.account_status }))
+        ...(ngos.ngos || []).map(n => ({ id: n.id, name: n.ngo_name || n.full_name, role: 'ngo', status: n.account_status }))
       ].filter(x => x.status === 'pending');
 
       renderList(modContainer, allPending, item => {

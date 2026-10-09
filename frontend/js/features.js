@@ -40,7 +40,9 @@ export const initNotifications = async () => {
       // Fetch user-specific notifications
       const response = await request('/api/notifications');
       const rows = response.notifications || [];
-      const unread = rows.filter(row => !row.is_read).length;
+      const unread = Number.isFinite(Number(response.unreadCount))
+        ? Number(response.unreadCount)
+        : rows.filter(row => !row.is_read).length;
 
       if (bell) {
         bell.dataset.count = unread;
@@ -68,11 +70,23 @@ export const initNotifications = async () => {
           `;
           item.addEventListener('click', async () => {
             if (!row.is_read) {
-              await request(`/api/notifications/${row.id}/read`, { method: 'PUT' });
+              try { await request(`/api/notifications/${row.id}/read`, { method: 'PUT' }); }
+              catch (error) { return notifyError(error); }
               row.is_read = true;
               item.classList.remove('unread');
               item.classList.add('read');
               refresh();
+            }
+            if (row.related_donation_id) {
+              const userRole = getSession().user?.role;
+              const section = userRole === 'ngo' ? '#available-donations' : '#donation-history';
+              const target = document.querySelector(section);
+              if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                const donationAction = [...target.querySelectorAll('[data-id]')]
+                  .find(control => String(control.dataset.id) === String(row.related_donation_id));
+                donationAction?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
             }
           });
           return item;
@@ -137,10 +151,12 @@ export const initExpiryCountdowns = () => {
 export const initEmergencyBanner = async () => {
   const banner = document.getElementById('emergency-alert-banner');
   if (!banner) return;
+  const { token, user } = getSession();
+  if (!token || !['ngo', 'admin'].includes(user?.role)) return;
 
   const checkEmergency = async () => {
     try {
-      const response = await request('/api/donations/emergency', { auth: false });
+      const response = await request('/api/donations/emergency');
       const urgents = response.donations || [];
       if (urgents.length > 0) {
         banner.hidden = false;
@@ -175,7 +191,36 @@ export const initLiveOperationsMap = async () => {
     loadCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
     await loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
 
-    const { mapData } = await request('/api/analytics/map-data', { auth: false });
+    let mapData;
+    const ngoMap = document.body.dataset.dashboard === 'ngo';
+    if (ngoMap) {
+      const status = $('#ngo-map-status');
+      const { profile } = await request('/api/ngo/profile');
+      const hasSavedCoordinates = profile?.latitude !== null && profile?.latitude !== undefined && profile?.longitude !== null && profile?.longitude !== undefined;
+      let latitude = hasSavedCoordinates ? Number(profile.latitude) : Number.NaN;
+      let longitude = hasSavedCoordinates ? Number(profile.longitude) : Number.NaN;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+        if (!navigator.geolocation) {
+          if (status) status.textContent = 'Set your NGO location to see nearby donations on the map.';
+          return;
+        }
+        const coords = await new Promise(resolve => navigator.geolocation.getCurrentPosition(
+          position => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+          () => resolve(null), { timeout: 8000 }
+        ));
+        if (!coords) {
+          if (status) status.textContent = 'Location was not shared. Use “Update location for nearby matching” to set it later.';
+          return;
+        }
+        ({ latitude, longitude } = coords);
+      }
+      const params = new URLSearchParams({ latitude, longitude, limit: '100' });
+      const response = await request(`/api/ngo/donations?${params}`);
+      mapData = { donations: response.donations || [], ngos: [] };
+    } else {
+      const response = await request('/api/analytics/map-data');
+      mapData = response.mapData;
+    }
     if (!mapData) return;
 
     mapContainers.forEach(container => {
@@ -188,11 +233,13 @@ export const initLiveOperationsMap = async () => {
 
       // 1. Donations (Red if urgent, Yellow/Orange if available)
       (mapData.donations || []).forEach(d => {
-        if (!d.latitude || !d.longitude) return;
-        const color = d.is_urgent ? '#e11d48' : '#eab308';
+        const latitude = Number(d.latitude);
+        const longitude = Number(d.longitude);
+        if (!Number.isFinite(latitude) || Math.abs(latitude) > 90 || !Number.isFinite(longitude) || Math.abs(longitude) > 180) return;
+        const color = d.is_urgent ? '#e11d48' : d.status === 'accepted' ? '#2563eb' : '#eab308';
         const label = d.is_urgent ? '🚨 Urgent Food Donation' : '🍲 Food Donation';
 
-        const circle = window.L.circleMarker([d.latitude, d.longitude], {
+        const circle = window.L.circleMarker([latitude, longitude], {
           radius: d.is_urgent ? 10 : 7,
           fillColor: color,
           color: '#fff',
@@ -201,28 +248,24 @@ export const initLiveOperationsMap = async () => {
           fillOpacity: 0.85
         }).addTo(map);
 
+        const detailsUrl = ngoMap ? '#available-donations' : '/admin/dashboard.html#donations';
         circle.bindPopup(`
           <b>${label}</b><br>
-          <strong>${escapeHtml(d.food_name)}</strong> (${d.quantity})<br>
-          Donor: ${escapeHtml(d.donor_name || 'Business')}<br>
-          City: ${escapeHtml(d.city || '')}
+          <strong>${escapeHtml(d.food_name)}</strong><br>
+          Quantity: ${escapeHtml(d.quantity || '')}<br>
+          Pickup deadline: ${escapeHtml(new Date(d.expiry_time).toLocaleString())}<br>
+          ${Number.isFinite(Number(d.distance_km)) ? `Distance: ${Number(d.distance_km).toFixed(1)} km<br>` : ''}
+          <a href="${detailsUrl}" data-map-donation="${Number(d.id)}">View donation details</a>
         `);
-        markers.push([d.latitude, d.longitude]);
-
-        // Simulated heat circle radius around donation hotspots
-        window.L.circle([d.latitude, d.longitude], {
-          radius: 1200,
-          color: color,
-          fillColor: color,
-          fillOpacity: 0.15,
-          weight: 1
-        }).addTo(map);
+        markers.push([latitude, longitude]);
       });
 
       // 2. Active NGOs (Green pins)
       (mapData.ngos || []).forEach(ngo => {
-        if (!ngo.latitude || !ngo.longitude) return;
-        const ngoMarker = window.L.circleMarker([ngo.latitude, ngo.longitude], {
+        const latitude = Number(ngo.latitude);
+        const longitude = Number(ngo.longitude);
+        if (!Number.isFinite(latitude) || Math.abs(latitude) > 90 || !Number.isFinite(longitude) || Math.abs(longitude) > 180) return;
+        const ngoMarker = window.L.circleMarker([latitude, longitude], {
           radius: 8,
           fillColor: '#16a34a',
           color: '#fff',
@@ -232,15 +275,30 @@ export const initLiveOperationsMap = async () => {
         }).addTo(map);
 
         ngoMarker.bindPopup(`<b>🏥 Active Partner NGO</b><br><strong>${escapeHtml(ngo.ngo_name)}</strong><br>${escapeHtml(ngo.city || '')}`);
-        markers.push([ngo.latitude, ngo.longitude]);
+        markers.push([latitude, longitude]);
       });
 
       if (markers.length > 0) {
         map.fitBounds(markers, { padding: [30, 30], maxZoom: 13 });
       }
+      const status = $('#ngo-map-status');
+      if (ngoMap && status) status.textContent = markers.length ? `${markers.length} available donation(s) shown. The map refreshes with the dashboard.` : 'No available donations with map coordinates were found nearby.';
       setTimeout(() => map.invalidateSize(), 300);
+      map.on('popupopen', event => {
+        const link = event.popup.getElement()?.querySelector('[data-map-donation]');
+        if (!link || !ngoMap) return;
+        link.addEventListener('click', () => {
+          setTimeout(() => {
+            const item = [...document.querySelectorAll('#available-donations [data-id]')]
+              .find(element => String(element.dataset.id) === link.dataset.mapDonation);
+            item?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 0);
+        }, { once: true });
+      });
     });
   } catch (error) {
+    const status = $('#ngo-map-status');
+    if (status && document.body.dataset.dashboard === 'ngo') status.textContent = 'The map could not be loaded. Retry by refreshing the page.';
     console.warn('Map initialization:', error.message);
   }
 };

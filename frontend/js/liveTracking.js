@@ -1,5 +1,5 @@
 import { notifyError, request } from './api.js';
-import { toast } from './utils.js';
+import { escapeHtml, toast } from './utils.js';
 
 let leafletLoaded = false;
 const loadLeaflet = async () => {
@@ -59,22 +59,24 @@ export const openLiveTracker = async (pickupId) => {
 
     const refreshTracking = async () => {
       try {
-        const response = await request(`/api/pickups/track/${pickupId}`, { auth: false });
+        const response = await request(`/api/pickups/track/${pickupId}`);
         const t = response.tracking;
         if (!t) return;
 
         const statusBar = document.getElementById('tracker-status-bar');
         const details = document.getElementById('tracker-details');
-        const statusClean = (t.status || 'pending').replace('_', ' ').toUpperCase();
+        const statusValue = /^[a-z_]+$/i.test(String(t.status || '')) ? String(t.status).toLowerCase() : 'pending';
+        const statusClean = escapeHtml(statusValue.replaceAll('_', ' ').toUpperCase());
 
-        statusBar.innerHTML = `<strong>Status:</strong> <span class="status-pill status-${t.status}">${statusClean}</span> &bull; <strong>Food:</strong> ${t.foodName} (${t.quantity})`;
+        statusBar.innerHTML = `<strong>Status:</strong> <span class="status-pill status-${statusValue}">${statusClean}</span> &bull; <strong>Food:</strong> ${escapeHtml(t.foodName)} (${escapeHtml(t.quantity)})`;
 
         let volunteerHtml = '<p><em>Waiting for delivery assignment…</em></p>';
         if (t.volunteer) {
+          const phone = String(t.volunteer.phone || '').replace(/[^+\d]/g, '');
           volunteerHtml = `
             <div class="tracker-card">
-              <h4>🚚 Rescue Driver: ${t.volunteer.name} (${t.volunteer.vehicleType || 'Vehicle'})</h4>
-              <p>📞 Phone: <a href="tel:${t.volunteer.phone}">${t.volunteer.phone || 'Available on request'}</a></p>
+              <h4>🚚 Rescue Driver: ${escapeHtml(t.volunteer.name)} (${escapeHtml(t.volunteer.vehicleType || 'Vehicle')})</h4>
+              <p>📞 Phone: ${phone ? `<a href="tel:${escapeHtml(phone)}">${escapeHtml(t.volunteer.phone)}</a>` : 'Available on request'}</p>
               <p>📍 Distance: <strong>${t.volunteer.distanceKm !== null ? t.volunteer.distanceKm + ' km' : 'Calculating…'}</strong> &bull; ETA: <strong>${t.volunteer.etaMinutes ? t.volunteer.etaMinutes + ' mins' : 'En route'}</strong></p>
             </div>
           `;
@@ -84,11 +86,11 @@ export const openLiveTracker = async (pickupId) => {
           <div class="tracker-route-grid">
             <div class="tracker-point">
               <strong>🏢 Pickup Origin:</strong>
-              <p>${t.origin.name} - ${t.origin.address}</p>
+              <p>${escapeHtml(t.origin.name)} - ${escapeHtml(t.origin.address)}</p>
             </div>
             <div class="tracker-point">
               <strong>🏥 Delivery Destination:</strong>
-              <p>${t.destination.name} - ${t.destination.address}</p>
+              <p>${escapeHtml(t.destination.name)} - ${escapeHtml(t.destination.address)}</p>
             </div>
           </div>
           ${volunteerHtml}
@@ -114,7 +116,7 @@ export const openLiveTracker = async (pickupId) => {
         if (t.origin.latitude && t.origin.longitude) {
           const originMarker = window.L.marker([t.origin.latitude, t.origin.longitude], {
             title: 'Pickup Location'
-          }).bindPopup(`<b>🏢 ${t.origin.name}</b><br>${t.origin.address}`);
+          }).bindPopup(`<b>🏢 ${escapeHtml(t.origin.name)}</b><br>${escapeHtml(t.origin.address)}`);
           originMarker.addTo(activeTrackingMap._fbLayer);
           markers.push([t.origin.latitude, t.origin.longitude]);
         }

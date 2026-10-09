@@ -27,6 +27,8 @@ const registerValidation = [
   body('city').trim().notEmpty().withMessage('City is required.').isLength({ max: 100 }),
   body('state').trim().notEmpty().withMessage('State is required.').isLength({ max: 100 }),
   body('pincode').trim().matches(pincodeRule).withMessage('A valid pincode is required.'),
+  body('latitude').optional({ checkFalsy: true }).isFloat({ min: -90, max: 90 }).withMessage('Latitude must be between -90 and 90.').toFloat(),
+  body('longitude').optional({ checkFalsy: true }).isFloat({ min: -180, max: 180 }).withMessage('Longitude must be between -180 and 180.').toFloat(),
   body('profileImage').optional({ checkFalsy: true }).trim().isURL().withMessage('Profile image must be a valid URL.'),
   handleValidation
 ];
@@ -46,6 +48,8 @@ const businessProfileValidation = [
   body('city').trim().notEmpty().withMessage('City is required.').isLength({ max: 100 }),
   body('state').trim().notEmpty().withMessage('State is required.').isLength({ max: 100 }),
   body('pincode').trim().matches(pincodeRule).withMessage('A valid pincode is required.'),
+  body('latitude').optional({ checkFalsy: true }).isFloat({ min: -90, max: 90 }).toFloat(),
+  body('longitude').optional({ checkFalsy: true }).isFloat({ min: -180, max: 180 }).toFloat(),
   handleValidation
 ];
 
@@ -66,7 +70,11 @@ const donationValidation = [
   body('expiryTime').isISO8601().withMessage('A valid expiry time is required.'),
   body('pickupDate').isISO8601().withMessage('A valid pickup date is required.'),
   body('pickupTime').matches(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/).withMessage('A valid pickup time is required.'),
+  body('pickupDateTime').isISO8601().withMessage('A valid pickup date and time is required.'),
   body('pickupAddress').trim().notEmpty().withMessage('Pickup address is required.').isLength({ max: 255 }),
+  body('city').optional({ checkFalsy: true }).trim().isLength({ max: 100 }),
+  body('pincode').optional({ checkFalsy: true }).trim().matches(pincodeRule),
+  body('storage').optional().isIn(['ambient', 'insulated', 'chilled']).withMessage('Choose a valid storage condition.'),
   body('latitude').optional().isFloat({ min: -90, max: 90 }).toFloat(),
   body('longitude').optional().isFloat({ min: -180, max: 180 }).toFloat(),
   body('description').optional().trim().isLength({ max: 3000 }),
@@ -77,7 +85,7 @@ const ngoRegistrationValidation = [
   body('fullName').trim().notEmpty().withMessage('Contact name is required.'), body('email').trim().isEmail().withMessage('A valid email is required.').normalizeEmail(),
   body('mobile').trim().matches(mobileRule).withMessage('A valid mobile number is required.'), body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.'),
   body('confirmPassword').custom((value, { req }) => value === req.body.password).withMessage('Passwords do not match.'), body('ngoName').trim().notEmpty().withMessage('NGO name is required.'),
-  body('address').trim().notEmpty().withMessage('Address is required.'), body('city').trim().notEmpty().withMessage('City is required.'), body('state').trim().notEmpty().withMessage('State is required.'), body('pincode').trim().matches(pincodeRule).withMessage('A valid pincode is required.'), handleValidation
+  body('address').trim().notEmpty().withMessage('Address is required.'), body('city').trim().notEmpty().withMessage('City is required.'), body('state').trim().notEmpty().withMessage('State is required.'), body('pincode').trim().matches(pincodeRule).withMessage('A valid pincode is required.'), body('latitude').optional({ checkFalsy: true }).isFloat({ min: -90, max: 90 }).toFloat(), body('longitude').optional({ checkFalsy: true }).isFloat({ min: -180, max: 180 }).toFloat(), handleValidation
 ];
 const ngoProfileValidation = [body('ngoName').trim().notEmpty().withMessage('NGO name is required.'), body('fullName').trim().notEmpty().withMessage('Contact name is required.'), body('mobile').trim().matches(mobileRule).withMessage('A valid mobile number is required.'), body('address').trim().notEmpty().withMessage('Address is required.'), body('city').trim().notEmpty().withMessage('City is required.'), body('state').trim().notEmpty().withMessage('State is required.'), body('pincode').trim().matches(pincodeRule).withMessage('A valid pincode is required.'), handleValidation];
 const volunteerRegistrationValidation = [

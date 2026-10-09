@@ -782,9 +782,9 @@ function initAnalyticsCharts() {
    ============================================================ */
 async function fetchBackendData() {
   try {
-    const [dashboard, donationsResponse, businessesResponse, ngosResponse, volunteersResponse, notificationsResponse, logsResponse] = await Promise.all([
+    const [dashboard, donationsResponse, businessesResponse, ngosResponse, notificationsResponse, logsResponse] = await Promise.all([
       request('/api/admin/dashboard'), request('/api/admin/donations?limit=100'), request('/api/admin/businesses?limit=100'),
-      request('/api/admin/ngos?limit=100'), request('/api/admin/volunteers?limit=100'), request('/api/admin/notifications?limit=50'), request('/api/admin/activity-logs?limit=50')
+      request('/api/admin/ngos?limit=100'), request('/api/admin/notifications?limit=50'), request('/api/admin/activity-logs?limit=50')
     ]);
     if (dashboard?.dashboard) {
       if ($('#kpi-total-donations')) {
@@ -800,11 +800,10 @@ async function fetchBackendData() {
     const mappedNgos = (ngosResponse.ngos || []).map(n => ({ id: String(n.id), name: n.ngo_name || n.full_name || 'NGO', contactPerson: n.full_name || '—', email: n.email || '—', phone: n.mobile || '—', location: n.city || '—', taxId: n.registration_number || '—', status: n.account_status === 'active' ? 'verified' : (n.account_status || 'pending'), claimedCount: 0, regDate: safeDate(n.created_at) }));
     state.pendingNgos = mappedNgos.filter(n => n.status === 'pending');
     state.ngos = mappedNgos.filter(n => n.status !== 'pending');
-    state.volunteers = (volunteersResponse.volunteers || []).map(v => ({ id: String(v.id), name: v.full_name || 'Volunteer', role: 'volunteer', phone: v.mobile || '—', city: v.city || '—', completedPickups: Number(v.completed_deliveries || 0), rating: v.rating ? String(v.rating) : '—', status: v.account_status || 'pending', vehicle: v.vehicle_type || '—' }));
     state.pickups = state.donations.filter(d => !['available', 'cancelled', 'completed'].includes(d.status)).map(d => ({ id: d.id, donorName: d.donor, ngoName: d.assignedNgo, receiverName: 'Distribution pending', eta: d.expiryText, step: d.status === 'delivered' ? 3 : 2, status: d.status }));
     state.alerts = (notificationsResponse.notifications || []).map(n => ({ id: String(n.id), priority: n.type === 'urgent' ? 'high' : 'low', title: n.title || 'Food Rescue alert', body: n.message || '', time: safeDate(n.created_at || n.createdAt) }));
     state.activityLogs = (logsResponse.logs || []).map(l => ({ actor: l.actor_name || l.actor || 'System', action: l.action || 'Activity recorded', time: safeDate(l.created_at) }));
-    renderAllDonations(); renderPendingNgos(); renderAllNgos(); renderDonors(); renderVolunteers(); renderPickupsTimeline(); renderAlertFeed(); renderActivityLogs();
+    renderAllDonations(); renderPendingNgos(); renderAllNgos(); renderDonors(); renderPickupsTimeline(); renderAlertFeed(); renderActivityLogs();
   } catch (err) {
     console.error('Admin data could not be loaded.', err);
     notifyError(err);

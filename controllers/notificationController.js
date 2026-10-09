@@ -6,7 +6,14 @@ exports.list = async (req, res, next) => { try { const { limit, offset } = page(
 exports.listForUser = async (req, res, next) => {
   try {
     const notifications = await Notification.listForUser(req.user.id, req.user.role);
-    return res.json({ success: true, notifications });
+    const unreadCount = await Notification.unreadCountForUser(req.user.id, req.user.role);
+    return res.json({ success: true, notifications, unreadCount });
+  } catch (error) { next(error); }
+};
+exports.markAllRead = async (req, res, next) => {
+  try {
+    const marked = await Notification.markAllRead(req.user.id, req.user.role);
+    return res.json({ success: true, message: 'All notifications marked as read.', marked });
   } catch (error) { next(error); }
 };
 exports.create = async (req, res, next) => {

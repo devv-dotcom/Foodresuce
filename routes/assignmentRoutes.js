@@ -5,8 +5,8 @@ const { uploadProofPhoto } = require('../middleware/upload');
 
 const router = express.Router();
 
-// Require authentication and NGO/Volunteer/Admin role
-router.use(authenticate, authorizeRoles('ngo', 'volunteer', 'admin'), requireActiveAccount);
+// Assignments are limited to the supported operational roles.
+router.use(authenticate, authorizeRoles('ngo', 'admin'), requireActiveAccount);
 
 router.get('/', controller.getAssignments);
 router.get('/:id', controller.getAssignmentById);

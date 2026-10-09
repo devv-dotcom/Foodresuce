@@ -3,7 +3,7 @@ const pool = require('../config/database');
 const Business = {
   async findDashboardUser(userId) {
     const [rows] = await pool.execute(
-      `SELECT id, full_name, email, mobile, role, business_name, address, city, state, pincode,
+      `SELECT id, full_name, email, mobile, role, business_name, address, city, state, pincode, latitude, longitude,
               profile_image, is_verified, created_at
        FROM users WHERE id = ? LIMIT 1`,
       [userId]
@@ -13,9 +13,9 @@ const Business = {
 
   async updateUser(connection, userId, data) {
     await connection.execute(
-      `UPDATE users SET full_name = ?, email = ?, mobile = ?, business_name = ?, address = ?, city = ?, state = ?, pincode = ?
+      `UPDATE users SET full_name = ?, email = ?, mobile = ?, business_name = ?, address = ?, city = ?, state = ?, pincode = ?, latitude = COALESCE(?, latitude), longitude = COALESCE(?, longitude)
        WHERE id = ?`,
-      [data.fullName, data.email, data.mobile, data.businessName, data.address, data.city, data.state, data.pincode, userId]
+      [data.fullName, data.email, data.mobile, data.businessName, data.address, data.city, data.state, data.pincode, data.latitude ?? null, data.longitude ?? null, userId]
     );
   },
 

@@ -63,15 +63,28 @@ export const request = async (path, { method = 'GET', body, auth = true, headers
 };
 
 export const notifyError = error => {
-  const messages = { 400: 'Please check the information you entered.', 401: 'Your session has expired. Please sign in again.', 403: 'You do not have permission for this action.', 404: 'The requested item was not found.', 500: 'The server had a problem. Please try again shortly.' };
+  const messages = { 400: 'Please check the information you entered.', 401: 'Your session has expired. Please sign in again.', 403: 'You do not have permission for this action.', 404: 'The requested item was not found.', 500: 'The server had a problem. Please try again shortly.', 502: 'The upload server is temporarily unavailable. Please try again shortly.' };
+  const validationErrors = error?.payload?.errors;
+  if (validationErrors?.length) {
+    const firstError = validationErrors[0];
+    const form = document.querySelector('[data-api-form="donation"]');
+    const field = form?.elements.namedItem(firstError.field);
+    const fieldLabel = field?.closest('.donor-field-group')?.querySelector('.donor-label')?.textContent.replace('*', '').trim();
+    field?.setAttribute('aria-invalid', 'true');
+    field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    field?.focus({ preventScroll: true });
+    const moreErrors = validationErrors.length > 1 ? ` (+${validationErrors.length - 1} more field${validationErrors.length > 2 ? 's' : ''})` : '';
+    return toast(`${fieldLabel || firstError.field}: ${firstError.message}${moreErrors}`, 'error');
+  }
   if (!error?.status && (error instanceof TypeError || /fetch|network/i.test(error?.message || ''))) return toast('Cannot reach the Food Rescue API. Start the backend and MySQL, then try again.', 'error');
+  if (error?.status === 502) return toast(messages[502], 'error');
   toast(error?.message || messages[error?.status] || 'Something went wrong. Please try again.', 'error');
 };
 
 export const login = (credentials, endpoint = '/api/auth/login') => request(endpoint, { method: 'POST', body: credentials, auth: false });
 export const register = (details, endpoint = '/api/auth/register') => request(endpoint, { method: 'POST', body: details, auth: false });
 export const fetchProfile = endpoint => request(endpoint);
-export const getDonations = () => request('/api/donations');
+export const getDonations = () => request('/api/business/donations');
 export const createDonation = data => request('/api/donations', { method: 'POST', body: data });
 export const acceptDonation = id => request(`/api/ngo/accept/${id}`, { method: 'POST' });
 export const acceptPickup = id => request(`/api/pickups/accept/${id}`, { method: 'POST' });

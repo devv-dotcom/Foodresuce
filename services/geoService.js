@@ -36,12 +36,15 @@ const CITY_COORDINATES = {
  * @returns {number} Distance in Kilometers rounded to 1 decimal place
  */
 function calculateDistance(lat1, lon1, lat2, lon2) {
+  if ([lat1, lon1, lat2, lon2].some(value => value === null || value === undefined || value === '')) return null;
   const nLat1 = Number(lat1);
   const nLon1 = Number(lon1);
   const nLat2 = Number(lat2);
   const nLon2 = Number(lon2);
 
-  if (Number.isNaN(nLat1) || Number.isNaN(nLon1) || Number.isNaN(nLat2) || Number.isNaN(nLon2)) {
+  if (![nLat1, nLon1, nLat2, nLon2].every(Number.isFinite)
+    || Math.abs(nLat1) > 90 || Math.abs(nLat2) > 90
+    || Math.abs(nLon1) > 180 || Math.abs(nLon2) > 180) {
     return null;
   }
 
@@ -55,7 +58,8 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     Math.cos(nLat2 * (Math.PI / 180)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const boundedA = Math.min(1, Math.max(0, a));
+  const c = 2 * Math.atan2(Math.sqrt(boundedA), Math.sqrt(1 - boundedA));
   const d = R * c;
 
   return Math.round(d * 10) / 10;
@@ -67,10 +71,12 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
  * @returns {{ latitude: number|null, longitude: number|null }}
  */
 function resolveCoordinates({ latitude, longitude, city, address }) {
+  const hasExplicitCoordinates = latitude !== null && latitude !== undefined && latitude !== ''
+    && longitude !== null && longitude !== undefined && longitude !== '';
   let lat = Number(latitude);
   let lng = Number(longitude);
 
-  if (!Number.isNaN(lat) && !Number.isNaN(lng) && lat !== 0 && lng !== 0) {
+  if (hasExplicitCoordinates && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
     return { latitude: Math.round(lat * 1000000) / 1000000, longitude: Math.round(lng * 1000000) / 1000000 };
   }
 

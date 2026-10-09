@@ -7,7 +7,7 @@ export const dashboardFor = dashboardForRole;
 const roleCanOpen = (role, path) => {
   const normalizedRole = String(role || '').toLowerCase();
   if (path === '/donate.html' || path === '/business/dashboard.html') return BUSINESS_ROLES.includes(normalizedRole);
-  if (path === '/partner/dashboard.html' || path === '/ngo/dashboard.html') return ['ngo', 'partner'].includes(normalizedRole);
+  if (path === '/ngo/dashboard.html') return normalizedRole === 'ngo';
   if (path === '/admin/dashboard.html') return normalizedRole === 'admin';
   return false;
 };
@@ -111,6 +111,13 @@ export const initAuth = () => {
     try {
       setLoading(submit, true, 'Creating account…');
       const response = await register(details, registerEndpoint(details.role));
+      // NGO applications require administrator approval before they can log in.
+      // The API intentionally returns no token for a pending application.
+      if (!response.token) {
+        toast(response.message || 'Your application was submitted for review. You can sign in after approval.');
+        form.reset();
+        return;
+      }
       saveSession(response); toast('Registration successful.'); location.assign(postAuthTarget(response.user));
     } catch (error) { notifyError(error); } finally { setLoading(submit, false); }
   });

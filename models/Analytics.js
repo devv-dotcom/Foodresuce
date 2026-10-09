@@ -74,7 +74,7 @@ module.exports = {
                COALESCE(u.business_name, u.full_name) AS donor_name
         FROM donations d
         JOIN users u ON u.id = d.business_user_id
-        WHERE d.deleted_at IS NULL AND d.status IN ('available', 'accepted')
+        WHERE d.deleted_at IS NULL AND d.status IN ('available', 'accepted') AND d.expiry_time > NOW()
       `),
       pool.execute(`
         SELECT n.id, n.ngo_name, u.city, u.latitude, u.longitude, u.address

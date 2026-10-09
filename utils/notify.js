@@ -3,17 +3,18 @@ const pool = require('../config/database');
 /**
  * Creates an in-system notification for a specific user or role broadcast
  */
-async function sendNotification({ recipientUserId = null, targetRole = 'all', title, message, connection = null }) {
-  try {
-    const executor = connection || pool;
-    await executor.execute(
-      `INSERT INTO notifications (created_by, recipient_user_id, target_role, title, message, is_read)
-       VALUES (NULL, ?, ?, ?, ?, FALSE)`,
-      [recipientUserId, targetRole, title, message]
-    );
-  } catch (error) {
-    console.error('[NOTIFY ERROR]', error.message);
-  }
+async function sendNotification({ recipientUserId = null, targetRole = 'all', title, message, notificationType = null, donationId = null, connection = null }) {
+  const executor = connection || pool;
+  const dedupeKey = recipientUserId && notificationType && donationId
+    ? `${notificationType}:${donationId}:${recipientUserId}`.slice(0, 190)
+    : null;
+  await executor.execute(
+    `INSERT INTO notifications
+       (created_by, recipient_user_id, target_role, title, message, is_read, notification_type, related_donation_id, dedupe_key)
+     VALUES (NULL, ?, ?, ?, ?, FALSE, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`,
+    [recipientUserId, targetRole, title, message, notificationType, donationId, dedupeKey]
+  );
 }
 
 /**

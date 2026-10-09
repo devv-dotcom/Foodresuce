@@ -82,8 +82,8 @@ exports.register = async (req, res, next) => {
     const password = await bcrypt.hash(req.body.password, 12);
     const [userResult] = await connection.execute(
       `INSERT INTO users
-        (full_name, email, mobile, password, role, business_name, address, city, state, pincode)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (full_name, email, mobile, password, role, business_name, address, city, state, pincode, latitude, longitude)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.body.fullName,
         req.body.email.toLowerCase(),
@@ -94,7 +94,9 @@ exports.register = async (req, res, next) => {
         req.body.address || '',
         req.body.city || '',
         req.body.state || '',
-        req.body.pincode || ''
+        req.body.pincode || '',
+        req.body.latitude ?? null,
+        req.body.longitude ?? null
       ]
     );
 

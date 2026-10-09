@@ -106,12 +106,6 @@ if (token && user?.role && params.has('autoredirect')) {
   }
 }
 
-// ── Quick Demo Login Accounts ─────────────────────────────────────────────
-const DEMO_ACCOUNTS = {
-  restaurant: { email: 'bistro@test.com', password: 'Password@123', role: 'restaurant' },
-  ngo:        { email: 'devv305399@gmail.com', password: 'Password@123', role: 'ngo' },
-};
-
 function selectRole(roleName) {
   const roleInput = $('#login-role');
   if (roleInput) roleInput.value = roleName;
@@ -130,21 +124,6 @@ if (params.get('role')) {
 // Role pills click listeners
 $$('.auth-role-pill').forEach(pill => {
   pill.addEventListener('click', () => selectRole(pill.dataset.role));
-});
-
-// Demo account buttons
-$$('.btn-demo-pill').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const role = btn.dataset.demo;
-    const creds = DEMO_ACCOUNTS[role];
-    if (!creds) return;
-    selectRole(creds.role);
-    const emailField = $('#login-email');
-    const pwdField = $('#login-password');
-    if (emailField) emailField.value = creds.email;
-    if (pwdField) pwdField.value = creds.password;
-    toast(`Loaded ${role.toUpperCase()} demo credentials. Click Sign In!`, 'success');
-  });
 });
 
 let pendingEmail = '';
