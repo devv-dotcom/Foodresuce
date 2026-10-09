@@ -384,8 +384,6 @@ export const initNgoDashboard = async () => {
       });
       const summary = $('#ngo-feed-summary');
       if (summary) summary.textContent = `${filtered.length} of ${availItems.length} available donations`;
-      window.__ngoVisibleDonationIds = filtered.map(d => String(d.id));
-      window.dispatchEvent(new CustomEvent('ngo:donation-filters-changed', { detail: { ids: window.__ngoVisibleDonationIds } }));
       renderList(availTarget, filtered, renderAvailableDonation, 'No available food matches these filters. Try widening the distance or clearing a filter.');
       initExpiryCountdowns();
     };
