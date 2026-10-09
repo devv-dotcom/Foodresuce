@@ -5,7 +5,6 @@ const User = require('../models/User');
 const Business = require('../models/Business');
 const BusinessProfile = require('../models/BusinessProfile');
 const BusinessImage = require('../models/BusinessImage');
-const Donation = require('../models/Donation');
 
 const buildProfile = async userId => {
   const [user, profile, images] = await Promise.all([
@@ -81,13 +80,17 @@ exports.getDashboard = async (req, res, next) => {
 // business's operational data from its dashboard.
 exports.getDonations = async (req, res, next) => {
   try {
-    const donations = await Donation.list({
-      where: 'WHERE d.business_user_id = ?',
-      values: [req.user.id],
-      limit: 50,
-      offset: 0,
-      includeDeleted: true
-    });
+    // The donor history only needs fields from the donations table. Avoid
+    // optional category/user/image joins so history still loads if ancillary
+    // tables are unavailable or have not yet been migrated.
+    const [donations] = await pool.execute(
+      `SELECT id, food_name, quantity, expiry_time, pickup_address, status, created_at
+       FROM donations
+       WHERE business_user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [req.user.id]
+    );
     return res.json({ success: true, donations });
   } catch (error) { next(error); }
 };
