@@ -29,7 +29,7 @@ exports.getLeaderboard = async (req, res, next) => {
       FROM ngos n
       JOIN users u ON u.id = n.user_id
       LEFT JOIN accepted_donations ad ON ad.ngo_id = n.id AND ad.status = 'completed'
-      GROUP BY n.id
+      GROUP BY n.id, n.ngo_name, u.city, u.impact_points
       ORDER BY rescues_completed DESC, impact_points DESC
       LIMIT 10
     `);
