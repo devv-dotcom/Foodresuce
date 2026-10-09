@@ -21,5 +21,7 @@ router.get('/certificate/:id', authenticate, certificateController.getDonationCe
 router.get('/rewards/my-points', authenticate, leaderboardController.getMyRewards);
 router.get('/notifications', authenticate, notificationController.listForUser);
 router.put('/notifications/:id/read', authenticate, notificationController.markRead);
+router.patch('/notifications/:id/read', authenticate, notificationController.markRead);
+router.patch('/notifications/read-all', authenticate, notificationController.markAllRead);
 
 module.exports = router;

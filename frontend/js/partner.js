@@ -1334,7 +1334,7 @@ function notifIconBg(type) {
 
 window.markNotifRead = async function(id) {
   try {
-    await request(`/api/notifications/${id}/read`, { method: 'PATCH' });
+    await request(`/api/partner/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
     loadNotifications();
   } catch (error) {
     toast(error.message || 'Unable to mark this notification as read.', 'error');
@@ -1343,7 +1343,7 @@ window.markNotifRead = async function(id) {
 
 document.getElementById('btn-mark-all-read')?.addEventListener('click', async () => {
   try {
-    await request('/api/notifications/read-all', { method: 'PATCH' });
+    await request('/api/partner/notifications/read-all', { method: 'PATCH' });
     toast('All notifications marked as read.');
     loadNotifications();
   } catch (error) {

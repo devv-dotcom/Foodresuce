@@ -2,6 +2,7 @@ const pool = require('../config/database');
 const Donation = require('../models/Donation');
 const geoService = require('../services/geoService');
 const notifStore = require('../services/notifications');
+const userNotifications = require('../services/userNotifications');
 const { createHandoffCode, hashHandoffCode, isValidHandoffCode } = require('../utils/handoffCode');
 
 async function createUniqueHandoffCode(connection, reservedHashes = []) {
@@ -561,7 +562,23 @@ exports.completeAssignment = async (req, res, next) => {
 
 exports.getNotifications = async (req, res, next) => {
   try {
-    return res.json({ success: true, notifications: notifStore.getForUser(String(req.user.id), 50) });
+    return res.json({ success: true, notifications: await userNotifications.listForUser(req.user.id, req.user.role) });
+  } catch (error) { next(error); }
+};
+
+exports.markNotificationRead = async (req, res, next) => {
+  try {
+    if (!(await userNotifications.markRead(req.params.id, req.user.id, req.user.role))) {
+      return res.status(404).json({ success: false, message: 'Notification not found.' });
+    }
+    return res.json({ success: true, message: 'Notification marked as read.' });
+  } catch (error) { next(error); }
+};
+
+exports.markAllNotificationsRead = async (req, res, next) => {
+  try {
+    await userNotifications.markAllRead(req.user.id, req.user.role);
+    return res.json({ success: true, message: 'All notifications marked as read.' });
   } catch (error) { next(error); }
 };
 

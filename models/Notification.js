@@ -25,5 +25,12 @@ module.exports = {
       [id, userId, role]
     );
     return result.affectedRows;
+  },
+  async markAllRead(userId, role) {
+    const [result] = await pool.execute(
+      "UPDATE notifications SET is_read = TRUE WHERE recipient_user_id = ? OR (recipient_user_id IS NULL AND target_role IN (?, 'all'))",
+      [userId, role]
+    );
+    return result.affectedRows;
   }
 };
