@@ -89,16 +89,19 @@ const calculateSmartMatch = (donation, partnerLat, partnerLng, trustScore = 95) 
   let score = 70; // baseline
 
   // 1. Distance score (max +20 points for close distance)
-  let distKm = 2.0;
-  if (donation.latitude && donation.longitude && !Number.isNaN(partnerLat) && !Number.isNaN(partnerLng)) {
+  let distKm = null;
+  const hasPartnerLocation = Number.isFinite(partnerLat) && Number.isFinite(partnerLng);
+  if (donation.latitude && donation.longitude && hasPartnerLocation) {
     distKm = geoService.calculateHaversineDistance(partnerLat, partnerLng, Number(donation.latitude), Number(donation.longitude));
   }
-  distKm = Math.round(distKm * 10) / 10;
 
-  if (distKm <= 2) score += 20;
-  else if (distKm <= 5) score += 14;
-  else if (distKm <= 10) score += 8;
-  else score += 2;
+  if (distKm !== null) {
+    distKm = Math.round(distKm * 10) / 10;
+    if (distKm <= 2) score += 20;
+    else if (distKm <= 5) score += 14;
+    else if (distKm <= 10) score += 8;
+    else score += 2;
+  }
 
   // 2. Expiry urgency boost (max +10 points if expiring soon)
   const hoursRemaining = (new Date(donation.expiry_time).getTime() - Date.now()) / (1000 * 60 * 60);
@@ -110,9 +113,13 @@ const calculateSmartMatch = (donation, partnerLat, partnerLng, trustScore = 95) 
 
   const finalPercent = Math.min(99, Math.max(50, Math.round(score)));
   
-  let explanation = `Recommended because you are ${distKm} km away and available for pickup.`;
+  let explanation = distKm === null
+    ? 'Recommended by availability and collection deadline. Distance is not available yet.'
+    : `Recommended because you are ${distKm} km away and available for pickup.`;
   if (hoursRemaining < 2) {
-    explanation = `Urgent rescue match! Expiring in ${Math.round(hoursRemaining * 60)} minutes (${distKm} km away).`;
+    explanation = distKm === null
+      ? `Urgent rescue match! The collection deadline is in ${Math.round(hoursRemaining * 60)} minutes.`
+      : `Urgent rescue match! Expiring in ${Math.round(hoursRemaining * 60)} minutes (${distKm} km away).`;
   }
 
   return {
@@ -219,11 +226,13 @@ exports.getDashboard = async (req, res, next) => {
 // GET /api/partner/donations
 exports.getDonations = async (req, res, next) => {
   try {
-    const partnerLat = Number(req.query.latitude || req.user?.latitude || 37.7749);
-    const partnerLng = Number(req.query.longitude || req.user?.longitude || -122.4194);
+    const latitude = req.query.latitude ?? req.user?.latitude;
+    const longitude = req.query.longitude ?? req.user?.longitude;
+    const partnerLat = latitude === null || latitude === undefined || latitude === '' ? NaN : Number(latitude);
+    const partnerLng = longitude === null || longitude === undefined || longitude === '' ? NaN : Number(longitude);
     const sort = req.query.sort || 'best_match';
 
-    const rawList = await Donation.list({ where: "WHERE d.status = 'available'", limit: 50, offset: 0 });
+    const rawList = await Donation.list({ where: "WHERE d.status = 'available' AND d.expiry_time > NOW()", limit: 50, offset: 0 });
 
     const donations = rawList.map(d => {
       const match = calculateSmartMatch(d, partnerLat, partnerLng);
@@ -235,8 +244,8 @@ exports.getDonations = async (req, res, next) => {
         foodType: d.food_type,
         quantity: d.quantity,
         numberOfMeals: d.number_of_meals || 50,
-        donorName: d.business_name || d.full_name || 'Restaurant ABC',
-        donorAddress: d.pickup_address || 'Main St',
+        donorName: d.business_name || d.full_name || 'Food donor',
+        donorAddress: d.pickup_address || 'Pickup details available after acceptance',
         latitude: d.latitude,
         longitude: d.longitude,
         distanceKm: match.distanceKm,
@@ -253,7 +262,7 @@ exports.getDonations = async (req, res, next) => {
     if (sort === 'urgent') {
       donations.sort((a, b) => new Date(a.expiryTime).getTime() - new Date(b.expiryTime).getTime());
     } else if (sort === 'nearby') {
-      donations.sort((a, b) => a.distanceKm - b.distanceKm);
+      donations.sort((a, b) => (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY));
     } else if (sort === 'best_match') {
       donations.sort((a, b) => b.smartMatch.matchScore - a.smartMatch.matchScore);
     } else {
@@ -271,8 +280,10 @@ exports.getDonationById = async (req, res, next) => {
     if (!d) return res.status(404).json({ success: false, message: 'Donation not found.' });
 
     const images = await Donation.getImages(d.id);
-    const partnerLat = Number(req.user?.latitude || 37.7749);
-    const partnerLng = Number(req.user?.longitude || -122.4194);
+    const latitude = req.user?.latitude;
+    const longitude = req.user?.longitude;
+    const partnerLat = latitude === null || latitude === undefined || latitude === '' ? NaN : Number(latitude);
+    const partnerLng = longitude === null || longitude === undefined || longitude === '' ? NaN : Number(longitude);
     const match = calculateSmartMatch(d, partnerLat, partnerLng);
 
     return res.json({
@@ -283,26 +294,21 @@ exports.getDonationById = async (req, res, next) => {
         category: d.category_name || d.food_type,
         quantity: d.quantity,
         numberOfMeals: d.number_of_meals,
-        description: d.description || 'Fresh surplus meal boxes prepared with strict hygiene standards.',
+        description: d.description || '',
         preparationTime: d.preparation_time,
         expiryTime: d.expiry_time,
-        storageInstructions: d.storage_instructions || 'Keep refrigerated or consume within 4 hours.',
+        storageInstructions: d.storage_condition || 'Not provided',
         isVegetarian: d.food_type === 'veg',
-        allergens: d.allergens || 'None declared',
+        allergens: d.allergens || '',
         images: images.map(image => image.image_path || image).filter(Boolean),
         donor: {
-          id: d.user_id,
-          name: d.business_name || d.full_name || 'Restaurant ABC',
-          phone: d.mobile || '+1 555-0199',
+          id: d.business_user_id,
+          name: d.business_name || d.owner_name || 'Food donor',
+          phone: d.donor_mobile || '',
           pickupAddress: d.pickup_address,
           latitude: d.latitude,
           longitude: d.longitude,
           distanceKm: match.distanceKm
-        },
-        delivery: {
-          destinationName: 'St. Jude Community Kitchen',
-          address: '450 Relief Way, Central District',
-          contactPhone: '+1 555-0288'
         },
         smartMatch: match
       }

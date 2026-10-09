@@ -12,10 +12,10 @@ router.get('/', authenticate, (req, res) => {
   try {
     const userId = String(req.user.id);
     if (req.query.all === 'true') {
-      const userNotifs = notifStore.getForUser(userId, 50);
+      const userNotifs = notifStore.getForUser(userId, 50, req.user.role);
       return res.json({ success: true, notifications: userNotifs });
     }
-    const unread = notifStore.getUnread(userId, 30);
+    const unread = notifStore.getUnread(userId, 30, req.user.role);
     return res.json({ success: true, notifications: unread, count: unread.length });
   } catch (err) {
     console.error('[notifications] GET error:', err);

@@ -98,7 +98,9 @@ exports.browseDonations = async (req, res, next) => {
     const values = [];
 
     if (userLat && userLon) {
-      where += ' AND d.latitude IS NOT NULL AND d.longitude IS NOT NULL AND (6371 * ACOS(COS(RADIANS(?)) * COS(RADIANS(d.latitude)) * COS(RADIANS(d.longitude) - RADIANS(?)) + SIN(RADIANS(?)) * SIN(RADIANS(d.latitude)))) <= ?';
+      // Keep listings without donor GPS visible. Address/city-only donations
+      // are valid and should not disappear when an NGO shares its location.
+      where += ' AND (d.latitude IS NULL OR d.longitude IS NULL OR (6371 * ACOS(COS(RADIANS(?)) * COS(RADIANS(d.latitude)) * COS(RADIANS(d.longitude) - RADIANS(?)) + SIN(RADIANS(?)) * SIN(RADIANS(d.latitude)))) <= ?)';
       values.push(userLat, userLon, userLat, radiusKm);
     }
 

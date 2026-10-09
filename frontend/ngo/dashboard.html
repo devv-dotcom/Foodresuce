@@ -159,9 +159,16 @@
 
     <!-- Notification Drawer -->
     <div class="notification-drawer" data-notification-drawer>
-      <header>Live Notifications</header>
+      <header class="notification-drawer-header">
+        <div>
+          <span class="notification-eyebrow">NGO PARTNER UPDATES</span>
+          <strong>Notifications</strong>
+          <small data-notification-summary>Loading updates…</small>
+        </div>
+        <button type="button" class="notification-read-all" data-notification-read-all disabled>Mark all read</button>
+      </header>
       <ul class="notification-list" data-notification-list>
-        <li class="notification-item">Loading notifications…</li>
+        <li class="notification-empty">Loading your updates…</li>
       </ul>
     </div>
 

@@ -6,7 +6,7 @@ const notificationStore = require('./notifications');
 async function listForUser(userId, role) {
   const [databaseNotifications, operationalNotifications] = await Promise.all([
     Notification.listForUser(userId, role),
-    Promise.resolve(notificationStore.getForUser(String(userId), 50))
+    Promise.resolve(notificationStore.getForUser(String(userId), 50, role))
   ]);
 
   const normalizedDatabase = databaseNotifications.map(notification => ({

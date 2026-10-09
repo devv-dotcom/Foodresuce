@@ -1391,6 +1391,21 @@ input, select, textarea { font: inherit; }
 }
 .p-card-title { font-family: var(--donor-serif); font-size: 1.18rem; }
 
+/* A readable notification stream with clear unread state and comfortable spacing. */
+.p-notif-list { display: grid; gap: 10px; padding: 16px; }
+.p-notif-item { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) 9px; align-items: start; gap: 13px; padding: 16px; border: 1px solid rgba(30,45,25,.1); border-radius: var(--r-lg); background: #fff; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.p-notif-item:hover { border-color: rgba(22,101,52,.28); background: #fcfdf9; transform: translateY(-1px); }
+.p-notif-item.unread { border-color: rgba(22,101,52,.2); background: #f3faf2; }
+.p-notif-icon-wrap { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; font-size: 1.15rem; }
+.p-notif-content { min-width: 0; }
+.p-notif-title { color: var(--ink); font-size: .9rem; font-weight: 800; line-height: 1.4; }
+.p-notif-body { margin-top: 4px; color: var(--muted); font-size: .82rem; line-height: 1.55; overflow-wrap: anywhere; }
+.p-notif-time { margin-top: 8px; color: #8a968d; font: 600 .68rem var(--mono); }
+.p-notif-unread-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: #168047; box-shadow: 0 0 0 4px rgba(22,128,71,.1); }
+.p-empty-photo { display: grid; min-height: 180px; margin-bottom: 16px; place-items: center; border: 1px dashed rgba(30,45,25,.2); border-radius: 14px; background: linear-gradient(135deg,#f5f8ef,#fffaf2); color: var(--muted); font-size: .84rem; font-weight: 700; }
+.p-donation-note { margin: 12px 0 0; padding: 12px 14px; border: 1px solid rgba(22,101,52,.12); border-radius: 12px; background: #f5faf2; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+@media (max-width: 620px) { .p-notif-list { padding: 10px; } .p-notif-item { grid-template-columns: 36px minmax(0, 1fr) 8px; gap: 10px; padding: 12px; } .p-notif-icon-wrap { width: 36px; height: 36px; } }
+
 /* Shared secondary-page heading system keeps every activity as intentional as
    the donor-style landing hero, rather than appearing as an isolated panel. */
 .p-section-intro { margin: 2px 0 22px; max-width: 680px; }

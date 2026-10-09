@@ -80,12 +80,17 @@ function push(data) {
 /**
  * Get unread notifications relevant for a given user ID (NGO / Donor / Volunteer).
  */
-function getUnread(userId, limit = 30) {
+function isVisibleTo(notification, userId, role) {
+  if (notification.recipientUserId) return String(notification.recipientUserId) === String(userId);
+  return notification.targetRole === 'all' || notification.targetRole === role;
+}
+
+function getUnread(userId, limit = 30, role = 'all') {
   const all = readAll();
   const sUserId = String(userId);
   return all
     .filter(n => {
-      const isTarget = (!n.recipientUserId || n.recipientUserId === sUserId);
+      const isTarget = isVisibleTo(n, sUserId, role);
       const isUnread = !n.readBy.includes(sUserId);
       return isTarget && isUnread;
     })
@@ -96,11 +101,11 @@ function getUnread(userId, limit = 30) {
 /**
  * Get all notifications for a specific user ID.
  */
-function getForUser(userId, limit = 50) {
+function getForUser(userId, limit = 50, role = 'all') {
   const all = readAll();
   const sUserId = String(userId);
   return all
-    .filter(n => !n.recipientUserId || n.recipientUserId === sUserId)
+    .filter(n => isVisibleTo(n, sUserId, role))
     .map(n => ({
       ...n,
       isRead: n.readBy.includes(sUserId) || Boolean(n.isRead && !n.recipientUserId)
