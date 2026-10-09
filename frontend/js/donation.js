@@ -247,4 +247,8 @@ export const initDonationIntegration = () => {
     resetEditor();
     showEditor();
   });
+
+  if ($('#donation-results')) {
+    loadDonations().catch(notifyError);
+  }
 };

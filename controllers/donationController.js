@@ -34,8 +34,9 @@ exports.createDonation = async (req, res, next) => {
   if (!safetyDeclarationComplete(req.body)) {
     return res.status(422).json({ success: false, message: 'Complete each donor food-handling declaration before publishing this donation.' });
   }
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     if (!await Donation.categoryExists(req.body.categoryId)) return res.status(422).json({ success: false, message: 'Selected food category does not exist.' });
     await connection.beginTransaction();
     const donationId = await Donation.create(connection, req.user.id, req.body);
@@ -53,10 +54,15 @@ exports.createDonation = async (req, res, next) => {
       connection
     });
 
-    await connection.commit();
     const createdDonation = enrichWithCountdown(await Donation.findById(donationId));
+    await connection.commit();
     return res.status(201).json({ success: true, message: 'Donation published. Donor food-handling declarations were recorded.', donation: createdDonation });
-  } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
+  } catch (error) {
+    if (connection) {
+      try { await connection.rollback(); } catch (_) {}
+    }
+    next(error);
+  } finally { connection?.release(); }
 };
 
 exports.getDonation = async (req, res, next) => {

@@ -141,19 +141,28 @@ document.addEventListener('click', async event => {
 export const initBusinessDashboard = async () => {
   if (!document.body.matches('[data-dashboard="business"]')) return;
   try {
-    const [dashboard, donations, rewards] = await Promise.all([
+    const [dashboardResult, donationsResult, rewardsResult] = await Promise.allSettled([
       request('/api/business/dashboard'),
       request('/api/business/donations'),
-      request('/api/rewards/my-points').catch(() => ({ points: 0, badge: 'Bronze Hero' }))
+      request('/api/rewards/my-points')
     ]);
 
-    setValues(dashboard.dashboard);
+    if (dashboardResult.status === 'fulfilled') setValues(dashboardResult.value.dashboard);
+    else notifyError(dashboardResult.reason);
 
     // Set Impact Points & Badge
     const ptsEl = document.querySelector('[data-metric="my-points"]');
     const badgeEl = document.querySelector('[data-metric="my-badge"]');
-    if (ptsEl) ptsEl.textContent = `${rewards.points || 0} pts`;
-    if (badgeEl) badgeEl.textContent = rewards.badge || 'Bronze Hero';
+    if (ptsEl) ptsEl.textContent = `${rewardsResult.status === 'fulfilled' ? rewardsResult.value.points || 0 : 0} pts`;
+    if (badgeEl) badgeEl.textContent = rewardsResult.status === 'fulfilled' ? rewardsResult.value.badge || 'Bronze Hero' : 'Bronze Hero';
+
+    if (donationsResult.status === 'rejected') {
+      const history = $('#donation-history');
+      if (history) history.textContent = 'Your donation history could not be loaded. Please refresh and try again.';
+      notifyError(donationsResult.reason);
+      return;
+    }
+    const donations = donationsResult.value;
 
     renderList($('#donation-history'), donations.donations, d => {
       const item = document.createElement('article');
