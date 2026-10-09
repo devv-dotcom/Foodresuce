@@ -5,6 +5,7 @@ const pool = require('../config/database');
 const User = require('../models/User');
 const { sendPasswordOtp, sendLoginOtp } = require('../utils/mail');
 const { BUSINESS_ROLES } = require('../config/roles');
+const { isLoginOtpEnabled } = require('../config/authConfig');
 
 const signAccessToken = user => jwt.sign({ sub: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 const serializeUser = user => ({ id: user.id, name: user.full_name, email: user.email, role: user.role, city: user.city, profileImage: user.profile_image });
@@ -155,6 +156,18 @@ exports.login = async (req, res, next) => {
       if (rows[0] && rows[0].account_status === 'suspended') return res.status(403).json({ success: false, message: 'Your NGO account has been suspended.' });
     }
 
+    // Temporarily allow password-only sign-in while transactional email is
+    // unavailable. Email verification and password reset state are unchanged.
+    if (!isLoginOtpEnabled()) {
+      return res.json({
+        success: true,
+        requiresOtp: false,
+        message: 'Login successful. Sign-in email codes are temporarily paused.',
+        token: signAccessToken(user),
+        user: serializeUser(user)
+      });
+    }
+
     const otp = crypto.randomInt(100000, 1000000).toString();
     await User.saveLoginOtp(user.email, otpHash(otp), new Date(Date.now() + loginOtpLifetimeMs));
     
@@ -201,6 +214,9 @@ exports.verifyLoginOtp = async (req, res, next) => {
 
 exports.resendLoginOtp = async (req, res, next) => {
   try {
+    if (!isLoginOtpEnabled()) {
+      return res.status(410).json({ success: false, message: 'Sign-in email codes are temporarily paused. Sign in with your email and password.' });
+    }
     const user = await User.findByEmail(req.body.email);
     // Deliberately preserve a uniform response to avoid account enumeration.
     if (!user) return res.json({ success: true, message: 'If that account is eligible, a new sign-in code has been sent.' });
