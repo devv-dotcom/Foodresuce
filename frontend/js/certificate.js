@@ -1,20 +1,37 @@
 import { notifyError, request } from './api.js';
 import { toast } from './utils.js';
 
-const loadScript = src => new Promise((resolve, reject) => {
-  if (document.querySelector(`script[src="${src}"]`)) return resolve();
-  const script = Object.assign(document.createElement('script'), { src, onload: resolve, onerror: reject });
-  document.head.append(script);
-});
+const PDF_LIBRARY_URLS = [
+  'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js'
+];
+
+const loadPdfLibrary = async () => {
+  if (window.jspdf?.jsPDF) return window.jspdf.jsPDF;
+  for (const src of PDF_LIBRARY_URLS) {
+    try {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = resolve;
+        script.onerror = () => { script.remove(); reject(new Error('Could not load the PDF generator.')); };
+        document.head.append(script);
+      });
+      if (window.jspdf?.jsPDF) return window.jspdf.jsPDF;
+    } catch { /* Try the backup CDN before reporting a clear error. */ }
+  }
+  throw new Error('The certificate PDF tool could not load. Check your internet connection and try again.');
+};
 
 export const downloadCertificate = async (donationId) => {
   try {
-    toast('Generating official donation certificate…');
-    await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js');
-    const response = await request(`/api/certificate/${donationId}`);
+    toast('Preparing your official donation certificate…');
+    const response = await request(`/api/certificate/${encodeURIComponent(donationId)}`);
     const c = response.certificate;
+    if (!c?.donationDetails) throw new Error('Certificate details are incomplete. Please try again later.');
 
-    const { jsPDF } = window.jspdf;
+    const jsPDF = await loadPdfLibrary();
     // Create landscape certificate
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
@@ -52,7 +69,7 @@ export const downloadCertificate = async (donationId) => {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(24);
     doc.setTextColor(23, 37, 25);
-    doc.text((c.donor.name || 'Valued Food Donor').toUpperCase(), 148.5, 71, { align: 'center' });
+    doc.text(String(c.donor?.name || 'Valued Food Donor').toUpperCase(), 148.5, 71, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
@@ -90,12 +107,12 @@ export const downloadCertificate = async (donationId) => {
     doc.setTextColor(20, 30, 20);
     doc.text(`Beneficiary Distribution Partner:`, 30, 160);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${c.receivingNgo.name} (${c.receivingNgo.city})`, 95, 160);
+    doc.text(`${c.receivingNgo?.name || 'Verified Partner NGO'} (${c.receivingNgo?.city || ''})`, 95, 160);
 
     doc.setFont('helvetica', 'bold');
     doc.text(`Food Item & Lot:`, 30, 167);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${c.donationDetails.foodName} (${c.donationDetails.quantity})`, 65, 167);
+    doc.text(`${c.donationDetails.foodName || 'Food donation'} (${c.donationDetails.quantity || 'Quantity not recorded'})`, 65, 167);
 
     // Signatures
     doc.setDrawColor(160, 160, 160);
@@ -117,7 +134,7 @@ export const downloadCertificate = async (donationId) => {
     doc.text('ZERO WASTE', 148.5, 178, { align: 'center' });
 
     // Save PDF
-    doc.save(`Food Rescue-Certificate-${c.donationDetails.id}.pdf`);
+    doc.save(`Food-Rescue-Certificate-${c.donationDetails.id}.pdf`);
     toast('Certificate downloaded successfully!');
   } catch (error) {
     notifyError(error);

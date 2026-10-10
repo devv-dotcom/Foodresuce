@@ -201,10 +201,11 @@ export const initBusinessDashboard = async () => {
     renderList($('#donation-history'), donations.donations, d => {
       const item = document.createElement('article');
       item.className = 'api-list-item';
-      const isCompleted = d.status === 'completed' || d.status === 'delivered';
-      const certAction = isCompleted
+      const certAction = d.status === 'completed'
         ? `<button type="button" class="btn-cert" data-action="download-cert" data-id="${d.id}">📜 Get Certificate</button>`
-        : '';
+        : d.status === 'delivered'
+          ? '<span class="status-pill status-available" title="The NGO must complete the rescue before a certificate is issued.">Certificate after rescue completion</span>'
+          : '';
       const smartAction = d.status === 'available'
         ? `<button type="button" class="btn-smart-sm" data-action="smart-match" data-id="${d.id}">🤖 AI Dispatch</button>`
         : '';
@@ -443,6 +444,14 @@ export const initNgoDashboard = async () => {
           <button type="submit" class="btn-confirm">Save Distribution</button>
         </form>`;
       else if (status === 'delivered') actionMarkup = `<button type="button" class="btn-confirm" data-ngo-workflow="complete" data-id="${d.id}">Complete Rescue</button>`;
+      const certificateAction = status === 'completed'
+        ? `<button type="button" class="btn-cert" data-action="download-cert" data-id="${d.id}">📜 Download Certificate</button>`
+        : '';
+      const certificateHint = status === 'food_collected'
+        ? '<p style="margin:10px 0 0;color:#64748b;font-size:.82rem;">Record the distribution and complete the rescue to unlock its certificate.</p>'
+        : status === 'delivered'
+          ? '<p style="margin:10px 0 0;color:#64748b;font-size:.82rem;">Complete the rescue to unlock its certificate.</p>'
+          : '';
       const chatAction = `<button type="button" class="btn-smart-sm" data-action="open-chat" data-id="${d.id}">💬 Chat with donor</button>`;
       const detailHref = `/donation-details.html?id=${encodeURIComponent(d.id)}&return=${encodeURIComponent('/ngo/dashboard.html#active-rescues')}`;
 
@@ -455,10 +464,11 @@ export const initNgoDashboard = async () => {
           <div style="display:flex; gap:8px; align-items:center;">
             ${formatStatus(status)}
             <a class="btn-smart-sm" href="${detailHref}">View Details</a>
+            ${certificateAction}
             ${chatAction}
           </div>
         </div>
-        <div style="margin-top:12px;">${actionMarkup}</div>
+        <div style="margin-top:12px;">${actionMarkup}${certificateHint}</div>
       `;
       return card;
     }, 'Your accepted donations and completed rescues will appear here.');

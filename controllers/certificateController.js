@@ -13,7 +13,7 @@ exports.getDonationCertificate = async (req, res, next) => {
       LEFT JOIN accepted_donations ad ON ad.donation_id = d.id
       LEFT JOIN ngos n ON n.id = ad.ngo_id
       LEFT JOIN users ngo_user ON ngo_user.id = n.user_id
-       WHERE d.id = ? AND d.deleted_at IS NULL AND d.status = 'completed'
+       WHERE d.id = ? AND d.deleted_at IS NULL
     `, [donationId]);
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Donation not found.' });
@@ -25,6 +25,9 @@ exports.getDonationCertificate = async (req, res, next) => {
       [donationId, req.user.id]
     );
     if (!isOwner && !ngoAccess.length && req.user.role !== 'admin') return res.status(403).json({ success: false, message: 'You do not have access to this certificate.' });
+    if (data.status !== 'completed') {
+      return res.status(409).json({ success: false, message: 'The certificate will be available after the rescue is completed.' });
+    }
     const meals = Number(data.number_of_meals) || 0;
 
     const certificate = {
