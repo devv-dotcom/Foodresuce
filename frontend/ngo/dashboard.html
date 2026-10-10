@@ -131,6 +131,62 @@
         transition: background .2s ease;
       }
       .btn-accept:hover { background: #14532d; }
+
+      /* NGO food feeds: a responsive card grid keeps the key pickup details readable. */
+      #available-donations-list,
+      #recommended-donations-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+        gap: 18px;
+        align-items: stretch;
+      }
+      .ngo-food-card {
+        min-width: 0;
+        overflow: hidden;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #dfe8df;
+        border-radius: 18px;
+        background: #fff;
+        box-shadow: 0 5px 18px rgba(15, 23, 42, .055);
+      }
+      .ngo-food-card.urgent-border { border-left: 5px solid #e11d48; }
+      .ngo-food-photo,
+      .ngo-food-placeholder {
+        display: grid;
+        width: 100%;
+        height: 190px;
+        object-fit: cover;
+        background: linear-gradient(135deg, #f0fdf4, #ecfccb);
+      }
+      .ngo-food-placeholder { place-items: center; color: #3f6212; font-size: 3rem; }
+      .ngo-food-content { display: flex; flex: 1; flex-direction: column; gap: 14px; padding: 18px; }
+      .ngo-food-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+      .ngo-food-heading h3 { margin: 0 0 9px; color: #17251a; font-size: 1.08rem; line-height: 1.35; overflow-wrap: anywhere; }
+      .ngo-food-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+      .ngo-food-badges > span { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border-radius: 999px; font-size: .7rem; font-weight: 800; line-height: 1.25; }
+      .ngo-food-badges .badge-declarations { background: #f0fdf4; color: #166534; }
+      .ngo-food-expiry { flex: none; color: #475569; font-size: .73rem; font-weight: 800; text-align: right; }
+      .ngo-food-expiry:empty { display: none; }
+      .ngo-food-meta { display: grid; gap: 9px; margin: 0; }
+      .ngo-food-meta div { min-width: 0; display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; font-size: .81rem; line-height: 1.4; }
+      .ngo-food-meta dt { color: #64748b; font-weight: 700; }
+      .ngo-food-meta dd { min-width: 0; margin: 0; color: #26352a; overflow-wrap: anywhere; }
+      .ngo-food-match { margin: 0; padding: 10px 12px; border-radius: 10px; background: #f0fdf4; color: #166534; font-size: .79rem; line-height: 1.45; }
+      .ngo-food-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+      .ngo-food-actions > a,
+      .ngo-food-actions > button { min-height: 40px; display: inline-flex; flex: 1 1 auto; justify-content: center; align-items: center; text-align: center; }
+      .ngo-feed-message { grid-column: 1 / -1; margin: 0; padding: 24px; border: 1px dashed #cbd5e1; border-radius: 16px; background: #fff; color: #64748b; text-align: center; line-height: 1.55; }
+      @media (max-width: 600px) {
+        .ngo-navbar { padding: 12px 16px; }
+        .ngo-navbar > div { flex-wrap: wrap; justify-content: flex-end; }
+        main[style] { padding-right: 16px !important; padding-left: 16px !important; }
+        .ngo-hero { padding: 26px 22px; margin: 18px 0 22px; }
+        #available-donations > div:first-child { align-items: flex-start !important; flex-direction: column; }
+        .ngo-food-card { border-radius: 15px; }
+        .ngo-food-photo, .ngo-food-placeholder { height: 170px; }
+      }
     </style>
   </head>
   <body data-required-role="ngo" data-dashboard="ngo">
@@ -265,7 +321,7 @@
         </div>
         <p id="ngo-feed-summary" class="ngo-feed-summary" aria-live="polite"></p>
 
-        <div id="available-donations-list">
+        <div id="available-donations-list" class="ngo-food-grid">
           <div class="notice">Scanning for surplus food donations in your radius…</div>
         </div>
       </section>
@@ -273,7 +329,7 @@
       <section id="recommended-donations" style="margin-bottom:40px;">
         <h2 style="margin:0; font-size:1.35rem; font-weight:800;">Recommended For You</h2>
         <p style="margin:4px 0 16px; color:#64748b; font-size:14px;">Prioritized using expiry, distance, and recorded food-safety declarations.</p>
-        <div id="recommended-donations-list"><div class="notice">Finding suitable donations…</div></div>
+        <div id="recommended-donations-list" class="ngo-food-grid"><div class="notice">Finding suitable donations…</div></div>
       </section>
 
       <!-- Accepted donation history and active rescue tracking -->

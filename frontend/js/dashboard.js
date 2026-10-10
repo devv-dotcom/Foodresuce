@@ -327,50 +327,59 @@ export const initNgoDashboard = async () => {
     // Available Donations Card Renderer
     const renderAvailableDonation = d => {
       const card = document.createElement('article');
-      card.className = `donation-card ${d.is_urgent ? 'urgent-border' : ''}`;
+      card.className = `ngo-food-card ${d.is_urgent ? 'urgent-border' : ''}`;
       const donorDeclarationsComplete = [d.safety_hygiene_confirmed, d.safety_storage_confirmed, d.safety_deadline_confirmed, d.safety_accuracy_confirmed]
         .every(value => value === true || Number(value) === 1);
-      const distBadge = d.distance_km !== null
-        ? `<span class="badge-distance">📍 ${d.distance_km} km away</span>`
+      const distance = Number(d.distance_km);
+      const distBadge = d.distance_km !== null && d.distance_km !== undefined && Number.isFinite(distance)
+        ? `<span class="badge-distance">📍 ${distance.toFixed(1)} km away</span>`
         : '';
-        const urgentBadge = d.is_urgent
-          ? `<span class="badge-urgent-tag">🚨 Urgent (<2h)</span>`
-          : '';
-        const urgencyBadge = d.urgency && d.urgency !== 'unknown'
-          ? `<span class="badge-urgent-tag">${escapeHtml(d.urgency.toUpperCase())}</span>`
-          : '';
-        const matchReasons = Array.isArray(d.recommendation_reasons) ? d.recommendation_reasons.join(' · ') : '';
-        const detailHref = `/donation-details.html?id=${encodeURIComponent(d.id)}&return=${encodeURIComponent('/ngo/dashboard.html#available-donations')}`;
+      const urgentBadge = d.is_urgent ? `<span class="badge-urgent-tag">🚨 Urgent</span>` : '';
+      const urgencyBadge = d.urgency && d.urgency !== 'unknown'
+        ? `<span class="badge-urgent-tag">${escapeHtml(d.urgency.toUpperCase())}</span>`
+        : '';
+      const matchReasons = Array.isArray(d.recommendation_reasons) ? d.recommendation_reasons.filter(Boolean).join(' · ') : '';
+      const detailHref = `/donation-details.html?id=${encodeURIComponent(d.id)}&return=${encodeURIComponent('/ngo/dashboard.html#available-donations')}`;
+      const location = [d.pickup_address, d.pickup_city || d.business_city || d.city].filter(Boolean).join(', ');
+      const foodType = d.food_type === 'veg' ? 'Vegetarian' : d.food_type === 'non_veg' || d.food_type === 'non-veg' ? 'Non-vegetarian' : '';
+      const foodImage = d.food_image ? `<img class="ngo-food-photo" src="${escapeHtml(d.food_image)}" alt="${escapeHtml(d.food_name || 'Donated food')}" loading="lazy" />` : '<div class="ngo-food-placeholder" aria-hidden="true">🍲</div>';
 
       card.innerHTML = `
-        ${d.food_image ? `<img src="${escapeHtml(d.food_image)}" alt="${escapeHtml(d.food_name)}" loading="lazy" style="width:100%; max-height:220px; object-fit:cover; border-radius:12px; margin-bottom:12px;" />` : ''}
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-          <div>
-            <h3 style="margin:0 0 4px;">${escapeHtml(d.food_name)}</h3>
-            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                ${distBadge}
-                ${urgentBadge}
-                ${urgencyBadge}
-                <span class="badge-declarations">${donorDeclarationsComplete ? 'Donor declarations recorded' : 'Legacy listing · details unavailable'}</span>
+        ${foodImage}
+        <div class="ngo-food-content">
+          <div class="ngo-food-heading">
+            <div>
+              <h3>${escapeHtml(d.food_name || 'Food donation')}</h3>
+              <div class="ngo-food-badges">
+                ${distBadge}${urgentBadge}${urgencyBadge}
+                <span class="badge-declarations">${donorDeclarationsComplete ? 'Safety details recorded' : 'Safety details unavailable'}</span>
+              </div>
             </div>
+            <span class="ngo-food-expiry" ${d.expiry_time ? `data-expiry-time="${escapeHtml(d.expiry_time)}"` : ''}>${escapeHtml(d.countdown_text || '')}</span>
           </div>
-          <span data-expiry-time="${d.expiry_time}">${d.countdown_text || ''}</span>
-        </div>
-        <p style="margin:6px 0 12px; font-size:.86rem; color:#475549;">
-          <strong>Quantity:</strong> ${escapeHtml(d.quantity)} &bull; 
-          <strong>Type:</strong> ${escapeHtml(d.food_type === 'veg' ? '🥦 Veg' : '🍗 Non-Veg')} &bull; 
-          <strong>Pickup:</strong> ${escapeHtml([d.pickup_address, d.pickup_city || d.business_city || d.city].filter(Boolean).join(', '))}<br>
-            <strong>Storage declared:</strong> ${escapeHtml(d.storage_condition || 'Not recorded')}
-            ${d.number_of_meals ? `<br><strong>Approx. meals:</strong> ${Number(d.number_of_meals).toLocaleString()}` : ''}
-            <br><strong>Donor:</strong> ${escapeHtml(d.business_name || d.owner_name || 'Food donor')}
-          </p>
-          ${matchReasons ? `<p style="margin:0 0 12px; color:#166534; font-size:.82rem;"><strong>Match:</strong> ${escapeHtml(matchReasons)}</p>` : ''}
-        <div style="display:flex; gap:8px;">
+          <dl class="ngo-food-meta">
+            <div><dt>Quantity</dt><dd>${escapeHtml(d.quantity || 'Not provided')}${foodType ? ` · ${foodType}` : ''}</dd></div>
+            ${location ? `<div><dt>Pickup</dt><dd>${escapeHtml(location)}</dd></div>` : ''}
+            <div><dt>Storage</dt><dd>${escapeHtml(d.storage_condition || 'Not recorded')}</dd></div>
+            ${d.number_of_meals ? `<div><dt>Estimated meals</dt><dd>${Number(d.number_of_meals).toLocaleString()}</dd></div>` : ''}
+            <div><dt>Donor</dt><dd>${escapeHtml(d.business_name || d.owner_name || 'Food donor')}</dd></div>
+          </dl>
+          ${matchReasons ? `<p class="ngo-food-match"><strong>Why it matches:</strong> ${escapeHtml(matchReasons)}</p>` : ''}
+          <div class="ngo-food-actions">
           <a class="btn-smart-sm" href="${detailHref}">View Details</a>
           <button type="button" class="btn-accept" data-action="accept-donation" data-id="${d.id}">Accept Donation</button>
           <button type="button" class="btn-smart-sm" data-action="smart-match" data-id="${d.id}">🤖 Smart Match</button>
+          </div>
         </div>
       `;
+      const image = card.querySelector('.ngo-food-photo');
+      image?.addEventListener('error', () => {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'ngo-food-placeholder';
+        placeholder.setAttribute('aria-hidden', 'true');
+        placeholder.textContent = '🍲';
+        image.replaceWith(placeholder);
+      }, { once: true });
       return card;
     };
 
@@ -401,7 +410,7 @@ export const initNgoDashboard = async () => {
       });
       const summary = $('#ngo-feed-summary');
       if (summary) summary.textContent = `${filtered.length} of ${availItems.length} available donations`;
-      renderList(availTarget, filtered, renderAvailableDonation, 'No available food matches these filters. Try widening the distance or clearing a filter.');
+      renderList(availTarget, filtered, renderAvailableDonation, '<p class="ngo-feed-message">No available food matches these filters. Try widening the distance or clearing a filter.</p>');
       initExpiryCountdowns();
     };
     const categorySelect = $('#ngo-food-category');
@@ -412,7 +421,7 @@ export const initNgoDashboard = async () => {
     });
     if (donations) renderFilteredDonations();
     const recommended = availItems.filter(d => d.recommended);
-    renderList($('#recommended-donations-list'), recommended, renderAvailableDonation, 'No donations currently match your location and food-safety criteria.');
+    renderList($('#recommended-donations-list'), recommended, renderAvailableDonation, '<p class="ngo-feed-message">No donations currently match your location and food-safety criteria. You can still browse all available food above.</p>');
 
     // History Card Renderer
     if (history) renderList($('#ngo-history'), history.donations, d => {
