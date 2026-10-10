@@ -1,9 +1,12 @@
 const nodemailer = require('nodemailer');
 
-// Prefer Resend when configured. Both providers use HTTPS so they work on
-// hosts that block outbound SMTP, including Render's free web services.
-const usingResend = Boolean(process.env.RESEND_API_KEY);
-const usingBrevo = !usingResend && Boolean(process.env.BREVO_API_KEY);
+// Both providers use HTTPS so they work on hosts that block outbound SMTP,
+// including Render's free web services. MAIL_PROVIDER can select one explicitly.
+const requestedProvider = String(process.env.MAIL_PROVIDER || '').trim().toLowerCase();
+const usingResend = requestedProvider === 'resend'
+  || (!requestedProvider && Boolean(process.env.RESEND_API_KEY));
+const usingBrevo = requestedProvider === 'brevo'
+  || (!requestedProvider && !usingResend && Boolean(process.env.BREVO_API_KEY));
 
 // Resend requires MAIL_FROM to belong to a domain verified in its dashboard.
 // Brevo also validates the sender; Gmail normalization applies to SMTP only.
@@ -32,7 +35,18 @@ const brevoSender = senderMatch
     : { email: senderValue };
 
 async function deliver(message) {
+  if (requestedProvider && requestedProvider !== 'resend' && requestedProvider !== 'brevo') {
+    const error = new Error('MAIL_PROVIDER must be set to resend or brevo.');
+    error.code = 'EMAIL_PROVIDER_INVALID';
+    throw error;
+  }
+
   if (usingResend) {
+    if (!process.env.RESEND_API_KEY) {
+      const error = new Error('RESEND_API_KEY is required for the selected email provider.');
+      error.code = 'RESEND_API_KEY_MISSING';
+      throw error;
+    }
     if (!fromAddress) {
       const error = new Error('MAIL_FROM must be set to an address on a verified Resend domain.');
       error.code = 'RESEND_MAIL_FROM_MISSING';
@@ -67,6 +81,17 @@ async function deliver(message) {
       throw error;
     }
     return;
+  }
+
+  if (usingBrevo && !process.env.BREVO_API_KEY) {
+    const error = new Error('BREVO_API_KEY is required for the selected email provider.');
+    error.code = 'BREVO_API_KEY_MISSING';
+    throw error;
+  }
+  if (usingBrevo && !fromAddress) {
+    const error = new Error('MAIL_FROM must be set to a verified Brevo sender.');
+    error.code = 'BREVO_MAIL_FROM_MISSING';
+    throw error;
   }
 
   if (!usingBrevo) {

@@ -15,7 +15,10 @@ const loginOtpLifetimeMs = Number(process.env.LOGIN_OTP_TTL_MS || 10 * 60 * 1000
 const deliveryFailureMessage = error => {
   const detail = String(error?.message || '').toLowerCase();
   if (error?.code === 'EMAIL_PROVIDER_MISSING') {
-    return 'Email delivery is not configured. Add RESEND_API_KEY and a verified MAIL_FROM sender to Render.';
+    return 'Email delivery is not configured. Add the selected provider API key and a verified MAIL_FROM sender to Render.';
+  }
+  if (error?.code === 'RESEND_API_KEY_MISSING') {
+    return 'Email delivery is not configured. Add RESEND_API_KEY to the Render environment and redeploy.';
   }
   if (error?.code === 'RESEND_MAIL_FROM_MISSING') {
     return 'Set MAIL_FROM to an email address on a domain verified in Resend, then try again.';
@@ -37,6 +40,9 @@ const deliveryFailureMessage = error => {
   }
   if (error?.code === 'BREVO_API_KEY_MISSING') {
     return 'Email delivery is not configured. Add BREVO_API_KEY to the Render environment and redeploy.';
+  }
+  if (error?.code === 'BREVO_MAIL_FROM_MISSING') {
+    return 'Set MAIL_FROM to a verified Brevo sender in the Render environment, then try again.';
   }
   if (error?.code === 'BREVO_HTTP_401') {
     return 'Brevo rejected the API key. Create a new Brevo API key and update BREVO_API_KEY in Render.';

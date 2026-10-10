@@ -11,6 +11,10 @@ services:
         value: 24.21.0
       - key: NODE_ENV
         value: production
+      - key: LOGIN_OTP_ENABLED
+        value: "true"
+      - key: MAIL_PROVIDER
+        value: brevo
       - key: DB_HOST
         sync: false
       - key: DB_PORT

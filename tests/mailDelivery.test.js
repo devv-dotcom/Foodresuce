@@ -9,7 +9,7 @@ const mailPath = require.resolve('../utils/mail');
 const controllerPath = require.resolve('../controllers/authController');
 const nodemailerPath = require.resolve('nodemailer');
 const mailEnvKeys = [
-  'NODE_ENV', 'RESEND_API_KEY', 'BREVO_API_KEY', 'MAIL_FROM', 'MAIL_USER',
+  'NODE_ENV', 'MAIL_PROVIDER', 'RESEND_API_KEY', 'BREVO_API_KEY', 'MAIL_FROM', 'MAIL_USER',
   'MAIL_PASSWORD', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_SECURE'
 ];
 
@@ -160,7 +160,8 @@ test('Resend production adapter sends login OTP with its API payload', async () 
 
 test('Brevo production adapter parses sender and sends password reset OTP', async () => {
   await withEnvironment({
-    NODE_ENV: 'production', BREVO_API_KEY: 'brevo-test-key',
+    NODE_ENV: 'production', MAIL_PROVIDER: 'brevo',
+    RESEND_API_KEY: 'resend-test-key', BREVO_API_KEY: 'brevo-test-key',
     MAIL_FROM: 'Food Rescue <rescue@example.test>'
   }, async () => {
     const originalFetch = global.fetch;
@@ -172,7 +173,8 @@ test('Brevo production adapter parses sender and sends password reset OTP', asyn
     const harness = loadMailerWithTransport(async () => { throw new Error('SMTP fallback should not run'); });
     try {
       await harness.mail.sendPasswordOtp({ email: 'donor@example.test', fullName: 'Donor', otp: '654321' });
-      assert.equal(requests.length, 1);
+      await harness.mail.sendLoginOtp({ email: 'ngo@example.test', fullName: 'NGO', otp: '123456' });
+      assert.equal(requests.length, 2);
       assert.equal(requests[0].url, 'https://api.brevo.com/v3/smtp/email');
       assert.equal(requests[0].options.method, 'POST');
       assert.equal(requests[0].options.headers['api-key'], 'brevo-test-key');
@@ -180,11 +182,107 @@ test('Brevo production adapter parses sender and sends password reset OTP', asyn
       assert.deepEqual(body.sender, { name: 'Food Rescue', email: 'rescue@example.test' });
       assert.deepEqual(body.to, [{ email: 'donor@example.test' }]);
       assert.match(body.textContent, /654321/);
+      const loginOtp = JSON.parse(requests[1].options.body);
+      assert.deepEqual(loginOtp.to, [{ email: 'ngo@example.test' }]);
+      assert.match(loginOtp.subject, /sign-in code/);
+      assert.match(loginOtp.textContent, /123456/);
     } finally {
       harness.restore();
       global.fetch = originalFetch;
     }
   });
+});
+
+test('enabled NGO login requires the Brevo-delivered OTP before issuing a session', async () => {
+  const bcrypt = require('bcrypt');
+  const jwt = require('jsonwebtoken');
+  const User = require('../models/User');
+  const pool = require('../config/database');
+  const originalMethods = {
+    findByEmail: User.findByEmail,
+    saveLoginOtp: User.saveLoginOtp,
+    consumeLoginOtp: User.consumeLoginOtp,
+    markEmailVerified: User.markEmailVerified,
+    findAuthById: User.findAuthById,
+    execute: pool.execute
+  };
+  const env = Object.fromEntries(['NODE_ENV', 'MAIL_PROVIDER', 'LOGIN_OTP_ENABLED', 'JWT_SECRET', 'BREVO_API_KEY', 'RESEND_API_KEY', 'MAIL_FROM']
+    .map(key => [key, process.env[key]]));
+  const priorMail = require.cache[mailPath];
+  const priorController = require.cache[controllerPath];
+  const deliveries = [];
+  let storedOtpHash;
+  let expiresAt;
+  const password = 'ngo-login-test-password';
+  const passwordHash = await bcrypt.hash(password, 4);
+  const user = {
+    id: 74, email: 'ngo@example.test', full_name: 'Test NGO', role: 'ngo',
+    city: 'Pune', profile_image: null, password: passwordHash, token_version: 0
+  };
+
+  process.env.NODE_ENV = 'production';
+  process.env.MAIL_PROVIDER = 'brevo';
+  process.env.LOGIN_OTP_ENABLED = 'true';
+  process.env.JWT_SECRET = 'login-otp-brevo-test-secret';
+  process.env.BREVO_API_KEY = 'brevo-test-key';
+  process.env.RESEND_API_KEY = 'resend-test-key';
+  process.env.MAIL_FROM = 'Food Rescue <rescue@example.test>';
+  require.cache[mailPath] = {
+    id: mailPath, filename: mailPath, loaded: true,
+    exports: {
+      sendPasswordOtp: async () => {},
+      sendLoginOtp: async delivery => { deliveries.push(delivery); }
+    }
+  };
+  delete require.cache[controllerPath];
+  const controller = require('../controllers/authController');
+  User.findByEmail = async email => email === user.email ? user : null;
+  User.saveLoginOtp = async (email, hash, expiry) => {
+    assert.equal(email, user.email);
+    storedOtpHash = hash;
+    expiresAt = expiry;
+    user.login_otp = hash;
+    user.login_otp_expires_at = expiry;
+  };
+  User.consumeLoginOtp = async (userId, hash) => userId === user.id && hash === storedOtpHash;
+  User.markEmailVerified = async () => {};
+  User.findAuthById = async id => id === user.id ? user : null;
+  pool.execute = async () => [[{ account_status: 'active' }], []];
+
+  try {
+    const login = responseHarness();
+    await controller.login({ body: { email: user.email, password } }, login, error => { throw error; });
+    assert.equal(login.statusCode, 200);
+    assert.equal(login.body.requiresOtp, true);
+    assert.equal(login.body.token, undefined);
+    assert.equal(deliveries.length, 1);
+    assert.equal(deliveries[0].email, user.email);
+    assert.match(deliveries[0].otp, /^\d{6}$/);
+    assert.equal(storedOtpHash, crypto.createHash('sha256').update(deliveries[0].otp).digest('hex'));
+    assert.ok(expiresAt > new Date());
+
+    const verify = responseHarness();
+    await controller.verifyLoginOtp({ body: { email: user.email, otp: deliveries[0].otp } }, verify, error => { throw error; });
+    assert.equal(verify.statusCode, 200);
+    assert.equal(jwt.verify(verify.body.token, process.env.JWT_SECRET).role, 'ngo');
+  } finally {
+    Object.assign(User, {
+      findByEmail: originalMethods.findByEmail,
+      saveLoginOtp: originalMethods.saveLoginOtp,
+      consumeLoginOtp: originalMethods.consumeLoginOtp,
+      markEmailVerified: originalMethods.markEmailVerified,
+      findAuthById: originalMethods.findAuthById
+    });
+    pool.execute = originalMethods.execute;
+    for (const [key, value] of Object.entries(env)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    delete require.cache[controllerPath];
+    if (priorController) require.cache[controllerPath] = priorController;
+    delete require.cache[mailPath];
+    if (priorMail) require.cache[mailPath] = priorMail;
+  }
 });
 
 test('forgot-password OTP is delivered, verified, and consumed by the reset flow', async () => {
