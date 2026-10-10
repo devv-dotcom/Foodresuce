@@ -116,13 +116,13 @@ async function runAutoMigration() {
       // administrator approval. Activate existing accounts during deployment.
       try {
         await connection.query("ALTER TABLE ngos MODIFY COLUMN account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'active'");
-        await connection.query("UPDATE ngos SET account_status = 'active' WHERE account_status <> 'active'");
+        await connection.query("UPDATE ngos SET account_status = 'active' WHERE account_status = 'pending'");
       } catch (err) {
         console.warn('[MIGRATION] Could not activate existing NGO accounts:', err.message);
       }
       try {
         await connection.query("ALTER TABLE business_profiles MODIFY COLUMN account_status ENUM('active', 'suspended', 'pending', 'rejected') NOT NULL DEFAULT 'active'");
-        await connection.query("UPDATE business_profiles SET account_status = 'active' WHERE account_status <> 'active'");
+        await connection.query("UPDATE business_profiles SET account_status = 'active' WHERE account_status = 'pending'");
       } catch (err) {
         console.warn('[MIGRATION] Could not activate existing donor/business accounts:', err.message);
       }
