@@ -16,7 +16,7 @@ async function seedAdminAccount() {
   try {
     await connection.beginTransaction();
     const [existingUsers] = await connection.execute(
-      'SELECT id, role FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1 FOR UPDATE',
+      'SELECT id, role, password FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1 FOR UPDATE',
       [adminEmail]
     );
 
@@ -38,15 +38,22 @@ async function seedAdminAccount() {
         throw conflict;
       }
       userId = existing.id;
+      const passwordMatches = await bcrypt.compare(adminPass, existing.password);
+      const passwordUpdate = passwordMatches
+        ? ''
+        : 'password = ?, token_version = token_version + 1,';
+      const values = passwordMatches
+        ? [profile.mobile, profile.address, profile.city, profile.state, profile.pincode, userId]
+        : [hashedPassword, profile.mobile, profile.address, profile.city, profile.state, profile.pincode, userId];
       await connection.execute(
-        `UPDATE users SET password = ?,
+        `UPDATE users SET ${passwordUpdate}
           mobile = COALESCE(NULLIF(mobile, ''), ?),
           address = COALESCE(NULLIF(address, ''), ?),
           city = COALESCE(NULLIF(city, ''), ?),
           state = COALESCE(NULLIF(state, ''), ?),
           pincode = COALESCE(NULLIF(pincode, ''), ?)
          WHERE id = ? AND role = 'admin'`,
-        [hashedPassword, profile.mobile, profile.address, profile.city, profile.state, profile.pincode, userId]
+        values
       );
     } else {
       const [insertUser] = await connection.execute(

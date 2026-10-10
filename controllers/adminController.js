@@ -6,7 +6,7 @@ const ActivityLog = require('../models/ActivityLog');
 const Donation = require('../models/Donation');
 const { getAdminEmail } = require('../config/adminConfig');
 
-const tokenFor = admin => jwt.sign({ sub: admin.id, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+const tokenFor = admin => jwt.sign({ sub: admin.id, role: 'admin', ver: Number(admin.token_version || 0) }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 const page = query => ({ limit: Math.min(Math.max(Number(query.limit) || 20, 1), 100), offset: Math.max(Number(query.offset) || 0, 0) });
 const log = (req, action, entityType, entityId, details) => ActivityLog.create({ actorUserId: req.user.id, action, entityType, entityId, details, ipAddress: req.ip });
 

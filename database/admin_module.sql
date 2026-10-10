@@ -10,6 +10,8 @@ ALTER TABLE volunteers
 ALTER TABLE donations
   ADD COLUMN IF NOT EXISTS deleted_at DATETIME NULL AFTER updated_at,
   ADD KEY idx_donations_deleted_status (deleted_at, status);
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS account_status ENUM('active', 'pending', 'suspended', 'rejected', 'deleted') NOT NULL DEFAULT 'active' AFTER is_verified;
 ALTER TABLE food_categories
   ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE AFTER name,
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at;
@@ -120,6 +122,24 @@ CREATE TABLE IF NOT EXISTS activity_logs (
   KEY idx_activity_logs_entity (entity_type, entity_id),
   KEY idx_activity_logs_action_created (action, created_at),
   CONSTRAINT fk_activity_logs_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS account_warnings (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  target_user_id BIGINT UNSIGNED NOT NULL,
+  issued_by_user_id BIGINT UNSIGNED NULL,
+  category VARCHAR(60) NOT NULL,
+  reason TEXT NOT NULL,
+  severity ENUM('low', 'medium', 'high') NOT NULL,
+  status ENUM('issued', 'acknowledged', 'appealed', 'closed') NOT NULL DEFAULT 'issued',
+  related_donation_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_account_warnings_target_created (target_user_id, created_at),
+  KEY idx_account_warnings_issuer_created (issued_by_user_id, created_at),
+  CONSTRAINT fk_account_warnings_target FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_account_warnings_issuer FOREIGN KEY (issued_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_account_warnings_donation FOREIGN KEY (related_donation_id) REFERENCES donations(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS website_settings (

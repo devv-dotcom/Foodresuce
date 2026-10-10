@@ -17,6 +17,11 @@ const User = {
     return rows[0] || null;
   },
 
+  async findAuthById(id) {
+    const [rows] = await pool.execute(`SELECT ${publicColumns}, token_version, account_status FROM users WHERE id = ? LIMIT 1`, [id]);
+    return rows[0] || null;
+  },
+
   async create(data) {
     const sql = `
       INSERT INTO users
@@ -79,10 +84,26 @@ const User = {
   },
 
   async updatePassword(userId, passwordHash) {
-    await pool.execute(
-      'UPDATE users SET password = ?, otp = NULL, otp_expires_at = NULL, login_otp = NULL, login_otp_expires_at = NULL WHERE id = ?',
+    const [result] = await pool.execute(
+      'UPDATE users SET password = ?, token_version = token_version + 1, otp = NULL, otp_expires_at = NULL, login_otp = NULL, login_otp_expires_at = NULL WHERE id = ?',
       [passwordHash, userId]
     );
+    return result.affectedRows === 1;
+  },
+
+  async consumeOtpAndUpdatePassword(userId, expectedOtpHash, passwordHash) {
+    const [result] = await pool.execute(
+      `UPDATE users SET password = ?, token_version = token_version + 1,
+       otp = NULL, otp_expires_at = NULL, login_otp = NULL, login_otp_expires_at = NULL
+       WHERE id = ? AND otp = ? AND otp_expires_at > ?`,
+      [passwordHash, userId, expectedOtpHash, new Date()]
+    );
+    return result.affectedRows === 1;
+  },
+
+  async revokeTokens(userId) {
+    const [result] = await pool.execute('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [userId]);
+    return result.affectedRows === 1;
   }
 };
 

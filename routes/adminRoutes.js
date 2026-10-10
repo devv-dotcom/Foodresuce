@@ -1,5 +1,7 @@
 const express = require('express');
 const admin = require('../controllers/adminController');
+const accounts = require('../controllers/accountManagementController');
+const operations = require('../controllers/adminOperationsController');
 const dashboard = require('../controllers/dashboardController');
 const report = require('../controllers/reportController');
 const analytics = require('../controllers/analyticsController');
@@ -13,7 +15,14 @@ const { rateLimit } = require('../middleware/rateLimit');
 const router = express.Router();
 router.post('/login', rateLimit(), adminLoginValidation, admin.login);
 router.use(authenticate, authorizeRoles('admin'), requireActiveAdmin);
+router.get('/accounts', accounts.list);
+router.get('/accounts/:id', accounts.details);
+router.put('/accounts/:id', accounts.update);
+router.put('/accounts/:id/status', accounts.setStatus);
+router.post('/accounts/:id/warnings', accounts.warn);
+router.delete('/accounts/:id', accounts.remove);
 router.get('/dashboard', dashboard.getDashboard);
+router.get('/pickups', operations.listPickups);
 router.get('/categories', category.list);
 
 router.get('/businesses', admin.listBusinesses);

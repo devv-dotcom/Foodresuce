@@ -71,10 +71,10 @@ test('admin login verifies bcrypt, issues an admin JWT, and reports safe failure
 });
 
 test('database lookup failures during token authentication remain server errors, not expired sessions', async () => {
-  const originalFindById = User.findPublicById;
+  const originalFindById = User.findAuthById;
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = 'admin-auth-flow-test-secret';
-  User.findPublicById = async () => { const error = new Error('database unavailable'); error.code = 'EACCES'; throw error; };
+  User.findAuthById = async () => { const error = new Error('database unavailable'); error.code = 'EACCES'; throw error; };
   const token = jwt.sign({ sub: 41, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '5m' });
   const req = { headers: { authorization: `Bearer ${token}` } };
   const res = responseHarness();
@@ -84,14 +84,14 @@ test('database lookup failures during token authentication remain server errors,
     assert.equal(res.statusCode, 200);
     assert.equal(passedError?.code, 'EACCES');
   } finally {
-    User.findPublicById = originalFindById;
+    User.findAuthById = originalFindById;
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
   }
 });
 
 test('donor and NGO bearer sessions still authenticate through the shared middleware', async () => {
-  const originalFindById = User.findPublicById;
+  const originalFindById = User.findAuthById;
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = 'admin-auth-flow-test-secret';
   try {
@@ -99,7 +99,7 @@ test('donor and NGO bearer sessions still authenticate through the shared middle
       { id: 56, role: 'restaurant' },
       { id: 57, role: 'ngo' }
     ]) {
-      User.findPublicById = async id => Number(id) === user.id ? user : null;
+      User.findAuthById = async id => Number(id) === user.id ? { ...user, token_version: 0 } : null;
       const token = jwt.sign({ sub: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '5m' });
       const req = { headers: { authorization: `Bearer ${token}` } };
       const res = responseHarness();
@@ -109,7 +109,27 @@ test('donor and NGO bearer sessions still authenticate through the shared middle
       assert.equal(req.user.role, user.role);
     }
   } finally {
-    User.findPublicById = originalFindById;
+    User.findAuthById = originalFindById;
+    if (previousSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = previousSecret;
+  }
+});
+
+test('logout token versions reject previously issued bearer tokens', async () => {
+  const originalFindById = User.findAuthById;
+  const previousSecret = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = 'admin-auth-flow-test-secret';
+  User.findAuthById = async () => ({ id: 56, role: 'restaurant', token_version: 1 });
+  const token = jwt.sign({ sub: 56, role: 'restaurant', ver: 0 }, process.env.JWT_SECRET, { expiresIn: '5m' });
+  const req = { headers: { authorization: `Bearer ${token}` } };
+  const res = responseHarness();
+  let continued = false;
+  try {
+    await authenticate(req, res, () => { continued = true; });
+    assert.equal(res.statusCode, 401);
+    assert.equal(continued, false);
+  } finally {
+    User.findAuthById = originalFindById;
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
   }

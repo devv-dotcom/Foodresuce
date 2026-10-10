@@ -7,6 +7,8 @@ const router = express.Router();
 
 // Assignments are limited to the supported operational roles.
 router.use(authenticate, authorizeRoles('ngo', 'admin'), requireActiveAccount);
+// Every ID-based read or mutation must first prove assignment ownership.
+router.param('id', controller.authorizeAssignment);
 
 router.get('/', controller.getAssignments);
 router.get('/:id', controller.getAssignmentById);

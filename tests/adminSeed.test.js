@@ -45,13 +45,18 @@ test('admin provisioning updates the configured bcrypt credential without reacti
   await withBootstrapEnv(async () => {
     const originalGetConnection = pool.getConnection;
     const statements = [];
+    const oldPasswordHash = await bcrypt.hash('previous-admin-password', 4);
+    let accountStatus = 'suspended';
     let committed = false;
     pool.getConnection = async () => ({
       beginTransaction: async () => {},
       execute: async (sql, values) => {
         statements.push({ sql, values });
-        if (sql.startsWith('SELECT id, role FROM users')) return [[{ id: 7, role: 'admin' }]];
+        if (sql.startsWith('SELECT id, role, password FROM users')) {
+          return [[{ id: 7, role: 'admin', password: oldPasswordHash }]];
+        }
         if (sql.startsWith('SELECT id FROM admins')) return [[{ id: 9 }]];
+        if (sql.startsWith('UPDATE admins SET account_status')) accountStatus = values[0];
         return [{ affectedRows: 1 }];
       },
       commit: async () => { committed = true; },
@@ -65,6 +70,7 @@ test('admin provisioning updates the configured bcrypt credential without reacti
       assert.ok(userUpdate);
       assert.equal(await bcrypt.compare(process.env.ADMIN_PASSWORD, userUpdate.values[0]), true);
       assert.equal(statements.some(({ sql }) => sql.startsWith('UPDATE admins SET account_status')), false);
+      assert.equal(accountStatus, 'suspended');
     } finally { pool.getConnection = originalGetConnection; }
   });
 });

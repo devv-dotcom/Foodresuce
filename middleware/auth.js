@@ -19,8 +19,14 @@ const authenticate = async (req, res, next) => {
   }
 
   try {
-    const user = await User.findPublicById(payload.sub);
+    const user = await User.findAuthById(payload.sub);
     if (!user) return res.status(401).json({ success: false, message: 'User account was not found.' });
+    if (Number(payload.ver || 0) !== Number(user.token_version || 0)) {
+      return res.status(401).json({ success: false, message: 'Your session is invalid or has expired.' });
+    }
+    if (['suspended', 'deleted', 'rejected'].includes(user.account_status)) {
+      return res.status(403).json({ success: false, message: 'Your account is not active. Please contact an administrator.' });
+    }
     if (!ALL_ROLES.includes(user.role)) return res.status(403).json({ success: false, message: 'This account role is no longer supported.' });
     req.user = user;
     return next();
@@ -48,7 +54,7 @@ const requireActiveAccount = async (req, res, next) => {
     // Keep suspension and rejection effective; other account types still require active status.
     const status = rows[0]?.account_status;
     const selfActivatedRole = req.user?.role === 'ngo' || BUSINESS_ROLES.includes(req.user?.role);
-    if (status && (selfActivatedRole ? ['rejected', 'suspended'].includes(status) : status !== 'active')) {
+    if (status && (selfActivatedRole ? ['pending', 'rejected', 'suspended'].includes(status) : status !== 'active')) {
       return res.status(403).json({ success: false, message: 'Your account is not active. Please contact an administrator.' });
     }
     next();

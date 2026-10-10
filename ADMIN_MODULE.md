@@ -44,6 +44,7 @@ Admin login, category create/edit, notification creation, donation status, conta
 | --- | --- | --- |
 | POST | `/api/admin/login` | Admin login |
 | GET | `/api/admin/dashboard` | Dashboard cards/activity series |
+| GET | `/api/admin/pickups` | Filter and paginate recorded pickup workflow rows and status counts |
 | GET | `/api/admin/businesses` | Businesses; supports `q`, `category`, `limit`, `offset` |
 | PUT | `/api/admin/business/approve/:id` | Approve business |
 | PUT | `/api/admin/business/reject/:id` | Reject business |
@@ -63,6 +64,23 @@ Admin login, category create/edit, notification creation, donation status, conta
 | GET/POST/DELETE | `/api/admin/notifications` | Manage/broadcast notifications |
 
 Additional admin endpoints support suspend/activate, restore donation, contacts, reviews, settings, notification reads, and activity logs.
+
+## 13. Account Management
+
+The admin dashboard includes a database-backed account directory for administrator, donor, and NGO accounts. Donor account records use the existing business-type role values. The account APIs are protected by the same administrator authentication middleware:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/accounts` | Search, filter, and paginate accounts; includes aggregate counts |
+| GET | `/api/admin/accounts/:id` | View profile, donation history, warnings, and account audit history |
+| PUT | `/api/admin/accounts/:id` | Update validated profile fields without changing role or permissions |
+| PUT | `/api/admin/accounts/:id/status` | Suspend or restore an account and revoke existing sessions |
+| POST | `/api/admin/accounts/:id/warnings` | Issue a reviewed warning and create an in-app notification |
+| DELETE | `/api/admin/accounts/:id` | Confirm and anonymize a donor or NGO while retaining transaction history |
+
+The startup migration adds `users.account_status` and creates `account_warnings`. Account deletion is an anonymization operation: it removes profile contact details, marks the account deleted, revokes sessions, and keeps donation and warning records available for audit and retention. Administrator accounts cannot be deleted through this endpoint; self-suspension and suspension of the last active administrator are blocked. NGO name or registration changes return the NGO to pending review.
+
+Donor roles remain represented by the application's existing business-type role values (restaurant, hotel, bakery, supermarket, catering, and marriage hall); the account interface groups them under Donor and does not expose a volunteer account directory.
 
 ## 9. JSON Responses
 

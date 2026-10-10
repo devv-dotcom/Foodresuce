@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
   pincode VARCHAR(12) NOT NULL,
   profile_image VARCHAR(500) NULL,
   is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+  account_status ENUM('active', 'pending', 'suspended', 'rejected', 'deleted') NOT NULL DEFAULT 'active',
   otp VARCHAR(255) NULL,
   otp_expires_at DATETIME NULL,
   login_otp VARCHAR(255) NULL,

@@ -9,7 +9,7 @@ const DeliveryProof = require('../models/DeliveryProof');
 const { sendNotification, awardPoints } = require('../utils/notify');
 const { getUrgency, scoreDonationForNgo, urgencyRank } = require('../services/rescueEngine');
 
-const tokenFor = user => jwt.sign({ sub: user.id, role: 'ngo' }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+const tokenFor = user => jwt.sign({ sub: user.id, role: 'ngo', ver: Number(user.token_version || 0) }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 const normalizeCity = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
   .split(',')[0].trim().toLocaleLowerCase().replace(/\s+/g, ' ');
 

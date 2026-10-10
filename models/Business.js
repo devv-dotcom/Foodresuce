@@ -25,7 +25,7 @@ const Business = {
   },
 
   async changePassword(userId, passwordHash) {
-    await pool.execute('UPDATE users SET password = ? WHERE id = ?', [passwordHash, userId]);
+    await pool.execute('UPDATE users SET password = ?, token_version = token_version + 1 WHERE id = ?', [passwordHash, userId]);
   }
 };
 

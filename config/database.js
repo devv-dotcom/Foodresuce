@@ -3,6 +3,10 @@ require('dotenv').config();
 
 const dbUrl = process.env.MYSQL_URL || process.env.DATABASE_URL;
 const isTiDb = Boolean(process.env.TIDB_HOST);
+const databaseTls = () => ({
+  ...(process.env.DB_SSL_CA ? { ca: process.env.DB_SSL_CA } : {}),
+  rejectUnauthorized: true
+});
 
 let pool;
 
@@ -13,7 +17,7 @@ if (dbUrl) {
     connectionLimit: 10,
     queueLimit: 0,
     timezone: 'Z',
-    ssl: process.env.DB_SSL === 'false' ? undefined : { rejectUnauthorized: false }
+    ssl: process.env.DB_SSL === 'false' && process.env.NODE_ENV !== 'production' ? undefined : databaseTls()
   });
 } else {
   pool = mysql.createPool({
@@ -26,7 +30,7 @@ if (dbUrl) {
     connectionLimit: 10,
     queueLimit: 0,
     timezone: 'Z',
-    ssl: (isTiDb || process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production') ? { rejectUnauthorized: false } : undefined
+    ssl: (isTiDb || process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production') ? databaseTls() : undefined
   });
 }
 

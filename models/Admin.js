@@ -5,7 +5,7 @@ const buildIn = items => items.map(() => '?').join(', ');
 module.exports = {
   async findByEmail(email) {
     const [rows] = await pool.execute(
-      `SELECT a.id AS admin_id, a.account_status, u.id, u.full_name, u.email, u.password, u.role
+      `SELECT a.id AS admin_id, a.account_status, u.id, u.full_name, u.email, u.password, u.role, u.token_version
        FROM admins a JOIN users u ON u.id = a.user_id WHERE LOWER(u.email) = LOWER(?) AND u.role = 'admin' LIMIT 1`, [email]
     );
     return rows[0] || null;

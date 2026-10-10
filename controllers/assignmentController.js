@@ -1,5 +1,39 @@
 const pool = require('../config/database');
 const notifStore = require('../services/notifications');
+const isLegacySchemaError = error => error?.code === 'ER_NO_SUCH_TABLE' || error?.code === 'ER_BAD_FIELD_ERROR';
+
+// Assignments are owned by the NGO user that accepted the donation. Admins
+// may view them for support; every other role must match the assigned user.
+exports.authorizeAssignment = async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    let rows;
+    try {
+      [rows] = await pool.execute(
+        `SELECT a.id, a.donation_id, a.member_id
+         FROM assignments a
+         WHERE a.id = ? AND (a.member_id = ? OR ? = 'admin')
+         LIMIT 1`,
+        [id, req.user.id, req.user.role]
+      );
+    } catch (error) {
+      if (!isLegacySchemaError(error)) throw error;
+      // Older installations may not have the assignments table. In that
+      // schema an NGO can access only pickup requests belonging to its NGO.
+      [rows] = await pool.execute(
+        `SELECT p.id, p.donation_id, p.volunteer_id AS member_id
+         FROM pickup_requests p
+         LEFT JOIN ngos n ON n.id = p.ngo_id
+         WHERE p.id = ? AND (? = 'admin' OR n.user_id = ?)
+         LIMIT 1`,
+        [id, req.user.role, req.user.id]
+      );
+    }
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    req.assignmentAccess = rows[0];
+    return next();
+  } catch (error) { return next(error); }
+};
 
 /**
  * Helper to normalize assignment object format for API responses
@@ -53,7 +87,7 @@ exports.getAssignments = async (req, res, next) => {
                 u.business_name, u.full_name AS donor_name
          FROM assignments a
          JOIN donations d ON a.donation_id = d.id
-         JOIN users u ON d.user_id = u.id
+         JOIN users u ON d.business_user_id = u.id
          WHERE a.member_id = ? ${statusFilter}
          ORDER BY a.updated_at DESC`,
         values
@@ -69,9 +103,10 @@ exports.getAssignments = async (req, res, next) => {
          FROM pickup_requests p
          JOIN donations d ON p.donation_id = d.id
          JOIN users u ON p.business_id = u.id
-         WHERE (p.volunteer_id = ? OR p.ngo_id = ?)
+          LEFT JOIN ngos n ON n.id = p.ngo_id
+          WHERE (? = 'admin' OR n.user_id = ?)
          ORDER BY p.updated_at DESC`,
-        [userId, userId]
+        [req.user.role, userId]
       );
       rows = pickupResults;
     }
@@ -94,9 +129,9 @@ exports.getAssignmentById = async (req, res, next) => {
                 d.description, d.expiry_time, u.business_name, u.full_name AS donor_name, u.mobile AS donor_phone
          FROM assignments a
          JOIN donations d ON a.donation_id = d.id
-         JOIN users u ON d.user_id = u.id
-         WHERE a.id = ? LIMIT 1`,
-        [id]
+         JOIN users u ON d.business_user_id = u.id
+         WHERE a.id = ? AND (a.member_id = ? OR ? = 'admin') LIMIT 1`,
+        [id, userId, req.user.role]
       );
       assignmentRow = rows[0];
     } catch (err) {
@@ -107,8 +142,9 @@ exports.getAssignmentById = async (req, res, next) => {
          FROM pickup_requests p
          JOIN donations d ON p.donation_id = d.id
          JOIN users u ON p.business_id = u.id
-         WHERE p.id = ? LIMIT 1`,
-        [id]
+         LEFT JOIN ngos n ON n.id = p.ngo_id
+         WHERE p.id = ? AND (? = 'admin' OR n.user_id = ?) LIMIT 1`,
+        [id, req.user.role, userId]
       );
       assignmentRow = rows[0];
     }
@@ -141,15 +177,15 @@ exports.startPickup = async (req, res, next) => {
     const userId = req.user.id;
 
     await pool.execute(
-      `UPDATE assignments SET status = 'GOING_TO_PICKUP', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND member_id = ?`,
-      [id, userId]
+      `UPDATE assignments SET status = 'GOING_TO_PICKUP', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (member_id = ? OR ? = 'admin')`,
+      [id, userId, req.user.role]
     );
 
     // Also update fallback pickup_requests
     try {
       await pool.execute(
-        `UPDATE pickup_requests SET status = 'pickup_started' WHERE id = ?`,
-        [id]
+        `UPDATE pickup_requests SET status = 'pickup_started' WHERE id = ? AND (? = 'admin' OR ngo_id = (SELECT id FROM ngos WHERE user_id = ? LIMIT 1))`,
+        [id, req.user.role, userId]
       );
     } catch (_) {}
 
@@ -171,14 +207,14 @@ exports.confirmPickup = async (req, res, next) => {
     const userId = req.user.id;
 
     await pool.execute(
-      `UPDATE assignments SET status = 'FOOD_COLLECTED', pickup_confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND member_id = ?`,
-      [id, userId]
+      `UPDATE assignments SET status = 'FOOD_COLLECTED', pickup_confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (member_id = ? OR ? = 'admin')`,
+      [id, userId, req.user.role]
     );
 
     try {
       await pool.execute(
-        `UPDATE pickup_requests SET status = 'food_collected' WHERE id = ?`,
-        [id]
+        `UPDATE pickup_requests SET status = 'food_collected' WHERE id = ? AND (? = 'admin' OR ngo_id = (SELECT id FROM ngos WHERE user_id = ? LIMIT 1))`,
+        [id, req.user.role, userId]
       );
     } catch (_) {}
 
@@ -200,14 +236,14 @@ exports.startDelivery = async (req, res, next) => {
     const userId = req.user.id;
 
     await pool.execute(
-      `UPDATE assignments SET status = 'OUT_FOR_DELIVERY', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND member_id = ?`,
-      [id, userId]
+      `UPDATE assignments SET status = 'OUT_FOR_DELIVERY', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (member_id = ? OR ? = 'admin')`,
+      [id, userId, req.user.role]
     );
 
     try {
       await pool.execute(
-        `UPDATE pickup_requests SET status = 'on_the_way' WHERE id = ?`,
-        [id]
+        `UPDATE pickup_requests SET status = 'on_the_way' WHERE id = ? AND (? = 'admin' OR ngo_id = (SELECT id FROM ngos WHERE user_id = ? LIMIT 1))`,
+        [id, req.user.role, userId]
       );
     } catch (_) {}
 
@@ -229,15 +265,17 @@ exports.completeAssignment = async (req, res, next) => {
     const userId = req.user.id;
 
     const [rows] = await pool.execute(
-      `SELECT donation_id FROM assignments WHERE id = ? LIMIT 1`,
-      [id]
+      `SELECT donation_id FROM assignments WHERE id = ? AND (member_id = ? OR ? = 'admin') LIMIT 1`,
+      [id, userId, req.user.role]
     );
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Assignment not found.' });
     const donationId = rows[0]?.donation_id;
 
-    await pool.execute(
-      `UPDATE assignments SET status = 'COMPLETED', delivery_confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [id]
+    const [updated] = await pool.execute(
+      `UPDATE assignments SET status = 'COMPLETED', delivery_confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (member_id = ? OR ? = 'admin')`,
+      [id, userId, req.user.role]
     );
+    if (!updated.affectedRows) return res.status(404).json({ success: false, message: 'Assignment not found.' });
 
     if (donationId) {
       await pool.execute(
@@ -248,8 +286,8 @@ exports.completeAssignment = async (req, res, next) => {
 
     try {
       await pool.execute(
-        `UPDATE pickup_requests SET status = 'completed' WHERE id = ?`,
-        [id]
+        `UPDATE pickup_requests SET status = 'completed' WHERE id = ? AND (? = 'admin' OR ngo_id = (SELECT id FROM ngos WHERE user_id = ? LIMIT 1))`,
+        [id, req.user.role, userId]
       );
     } catch (_) {}
 
@@ -280,8 +318,8 @@ exports.cancelAssignment = async (req, res, next) => {
     const userId = req.user.id;
 
     const [rows] = await pool.execute(
-      `SELECT donation_id FROM assignments WHERE id = ? AND member_id = ? LIMIT 1`,
-      [id, userId]
+      `SELECT donation_id FROM assignments WHERE id = ? AND (member_id = ? OR ? = 'admin') LIMIT 1`,
+      [id, userId, req.user.role]
     );
     
     if (!rows.length) {
@@ -290,10 +328,11 @@ exports.cancelAssignment = async (req, res, next) => {
 
     const donationId = rows[0].donation_id;
 
-    await pool.execute(
-      `UPDATE assignments SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [id]
+    const [updated] = await pool.execute(
+      `UPDATE assignments SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (member_id = ? OR ? = 'admin')`,
+      [id, userId, req.user.role]
     );
+    if (!updated.affectedRows) return res.status(404).json({ success: false, message: 'Assignment not found.' });
 
     if (donationId) {
       await pool.execute(

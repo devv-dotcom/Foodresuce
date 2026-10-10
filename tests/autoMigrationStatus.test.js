@@ -10,3 +10,7 @@ test('startup migration activates pending accounts without clearing rejection or
   assert.match(migration, /UPDATE business_profiles SET account_status = 'active' WHERE account_status = 'pending'/);
   assert.doesNotMatch(migration, /UPDATE (?:ngos|business_profiles) SET account_status = 'active' WHERE account_status <> 'active'/);
 });
+
+test('startup migration adds a defaulted access-token version for session revocation', () => {
+  assert.match(migration, /ensureColumn\('users', 'token_version', 'INT UNSIGNED NOT NULL DEFAULT 0'\)/);
+});

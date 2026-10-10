@@ -28,6 +28,9 @@ async function runAutoMigration() {
       };
 
       // 1. Users table additions
+      // Version access tokens so logout and password changes revoke existing sessions.
+      await ensureColumn('users', 'token_version', 'INT UNSIGNED NOT NULL DEFAULT 0');
+      await ensureColumn('users', 'account_status', "ENUM('active', 'pending', 'suspended', 'rejected', 'deleted') NOT NULL DEFAULT 'active'");
       await ensureColumn('users', 'login_otp', 'VARCHAR(255) NULL');
       await ensureColumn('users', 'login_otp_expires_at', 'DATETIME NULL');
       await ensureIndex('users', 'idx_users_login_otp_expiry', 'KEY idx_users_login_otp_expiry (login_otp_expires_at)');
@@ -98,6 +101,23 @@ async function runAutoMigration() {
       }
 
       // 4. Persisted, recipient-scoped notification metadata and deduplication.
+      await connection.query(`CREATE TABLE IF NOT EXISTS account_warnings (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        target_user_id BIGINT UNSIGNED NOT NULL,
+        issued_by_user_id BIGINT UNSIGNED NULL,
+        category VARCHAR(60) NOT NULL,
+        reason TEXT NOT NULL,
+        severity ENUM('low', 'medium', 'high') NOT NULL,
+        status ENUM('issued', 'acknowledged', 'appealed', 'closed') NOT NULL DEFAULT 'issued',
+        related_donation_id BIGINT UNSIGNED NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_account_warnings_target_created (target_user_id, created_at),
+        KEY idx_account_warnings_issuer_created (issued_by_user_id, created_at),
+        CONSTRAINT fk_account_warnings_target FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+        CONSTRAINT fk_account_warnings_issuer FOREIGN KEY (issued_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+        CONSTRAINT fk_account_warnings_donation FOREIGN KEY (related_donation_id) REFERENCES donations(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB`);
       const [notificationTableRows] = await connection.query(
         'SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
         [dbName, 'notifications']

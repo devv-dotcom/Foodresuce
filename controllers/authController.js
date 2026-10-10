@@ -7,7 +7,7 @@ const { sendPasswordOtp, sendLoginOtp } = require('../utils/mail');
 const { BUSINESS_ROLES } = require('../config/roles');
 const { isLoginOtpEnabled } = require('../config/authConfig');
 
-const signAccessToken = user => jwt.sign({ sub: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+const signAccessToken = user => jwt.sign({ sub: user.id, role: user.role, ver: Number(user.token_version || 0) }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 const serializeUser = user => ({ id: user.id, name: user.full_name, email: user.email, role: user.role, city: user.city, profileImage: user.profile_image });
 const otpHash = otp => crypto.createHash('sha256').update(otp).digest('hex');
 const loginOtpLifetimeMs = Number(process.env.LOGIN_OTP_TTL_MS || 10 * 60 * 1000);
@@ -205,7 +205,7 @@ exports.verifyLoginOtp = async (req, res, next) => {
     if (!consumed) return res.status(400).json({ success: false, message: 'The sign-in code is invalid or has expired.' });
     await User.markEmailVerified(user.id);
     if (user.role === 'admin') await pool.execute('UPDATE admins SET last_login_at = CURRENT_TIMESTAMP WHERE user_id = ?', [user.id]);
-    const publicUser = await User.findPublicById(user.id);
+    const publicUser = await User.findAuthById(user.id);
     return res.json({ success: true, message: 'Email verified. Welcome back to Food Rescue.', token: signAccessToken(publicUser), user: serializeUser(publicUser) });
   } catch (error) { next(error); }
 };
@@ -234,7 +234,12 @@ exports.resendLoginOtp = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-exports.logout = async (_req, res) => res.json({ success: true, message: 'Logged out successfully. Remove the JWT from the client.' });
+exports.logout = async (req, res, next) => {
+  try {
+    await User.revokeTokens(req.user.id);
+    return res.json({ success: true, message: 'Logged out successfully.' });
+  } catch (error) { next(error); }
+};
 
 exports.forgotPassword = async (req, res, next) => {
   try {
@@ -254,7 +259,7 @@ exports.verifyOtp = async (req, res, next) => {
     const user = await User.findByEmail(req.body.email);
     const expired = !user?.otp_expires_at || new Date(user.otp_expires_at) < new Date();
     if (!user || !user.otp || expired || otpHash(req.body.otp) !== user.otp) return res.status(400).json({ success: false, message: 'The OTP is invalid or has expired.' });
-    const resetToken = jwt.sign({ sub: user.id, purpose: 'password_reset' }, process.env.JWT_SECRET, { expiresIn: process.env.RESET_TOKEN_EXPIRES_IN || '15m' });
+    const resetToken = jwt.sign({ sub: user.id, purpose: 'password_reset', otp: user.otp }, process.env.JWT_SECRET, { expiresIn: process.env.RESET_TOKEN_EXPIRES_IN || '15m' });
     return res.json({ success: true, message: 'OTP verified. You can now reset your password.', resetToken });
   } catch (error) { next(error); }
 };
@@ -263,9 +268,9 @@ exports.resetPassword = async (req, res, next) => {
   try {
     const payload = jwt.verify(req.body.resetToken, process.env.JWT_SECRET);
     if (payload.purpose !== 'password_reset') return res.status(400).json({ success: false, message: 'Invalid password reset token.' });
-    const user = await User.findPublicById(payload.sub);
-    if (!user) return res.status(400).json({ success: false, message: 'User account was not found.' });
-    await User.updatePassword(user.id, await bcrypt.hash(req.body.newPassword, 12));
+    if (typeof payload.otp !== 'string' || !/^[a-f0-9]{64}$/.test(payload.otp)) return res.status(400).json({ success: false, message: 'Invalid password reset token.' });
+    const updated = await User.consumeOtpAndUpdatePassword(payload.sub, payload.otp, await bcrypt.hash(req.body.newPassword, 12));
+    if (!updated) return res.status(400).json({ success: false, message: 'The password reset token is invalid or has expired.' });
     return res.json({ success: true, message: 'Password reset successful. Please sign in with your new password.' });
   } catch (error) {
     return res.status(400).json({ success: false, message: 'The password reset token is invalid or has expired.' });

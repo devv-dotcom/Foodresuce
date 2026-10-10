@@ -5,10 +5,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-store/
 
-# Environment variables (keep secrets safe!)
-.env
-.env.local
-.env.*.local
+# Environment variables (keep secrets safe!). Example templates are safe to track.
+.env*
+!.env.example
+!.env.*.example
 
 # Uploads (user-generated files, usually large)
 uploads/
