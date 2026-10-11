@@ -158,6 +158,38 @@ test('Resend production adapter sends login OTP with its API payload', async () 
   });
 });
 
+test('Resend SDK failures are normalized without exposing provider response details', async () => {
+  await withEnvironment({
+    NODE_ENV: 'production', MAIL_PROVIDER: 'resend', RESEND_API_KEY: 'resend-test-key',
+    MAIL_FROM: 'Food Rescue <rescue@example.test>'
+  }, async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async () => ({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: new Headers(),
+      text: async () => JSON.stringify({ name: 'invalid_api_key', message: 'private provider detail' })
+    });
+    const harness = loadMailerWithTransport(async () => { throw new Error('SMTP fallback should not run'); });
+    try {
+      await assert.rejects(
+        harness.mail.sendLoginOtp({ email: 'ngo@example.test', fullName: 'NGO', otp: '123456' }),
+        error => {
+          assert.equal(error.code, 'RESEND_DELIVERY_FAILED');
+          assert.equal(error.statusCode, undefined);
+          assert.equal(error.provider, 'resend');
+          assert.doesNotMatch(error.message, /private provider detail|resend-test-key/);
+          return true;
+        }
+      );
+    } finally {
+      harness.restore();
+      global.fetch = originalFetch;
+    }
+  });
+});
+
 test('Brevo production adapter parses sender and sends password reset OTP', async () => {
   await withEnvironment({
     NODE_ENV: 'production', MAIL_PROVIDER: 'brevo',

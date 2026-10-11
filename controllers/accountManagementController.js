@@ -1,9 +1,13 @@
 const pool = require('../config/database');
 const Account = require('../models/AccountManagement');
+const ActivityLog = require('../models/ActivityLog');
 const { BUSINESS_ROLES } = require('../config/roles');
 
 const validId = value => /^\d{1,16}$/.test(String(value || '')) && Number.isSafeInteger(Number(value)) && Number(value) > 0;
-const page = query => ({ limit: Math.min(Math.max(Number(query.limit) || 25, 1), 100), offset: Math.max(Number(query.offset) || 0, 0) });
+const MAX_PAGE_SIZE = 100;
+const MAX_PAGE_OFFSET = 1000000;
+const VALID_STATUSES = new Set(['active', 'pending', 'suspended', 'deleted', 'rejected']);
+const VALID_SORTS = new Set(['created', 'name', 'email', 'donations']);
 const donorRoles = BUSINESS_ROLES;
 const isDonor = role => donorRoles.includes(role);
 const audit = (connection, req, action, userId, details = {}) => connection.execute(
@@ -11,17 +15,123 @@ const audit = (connection, req, action, userId, details = {}) => connection.exec
   [req.user.id, action, userId, JSON.stringify(details), req.ip]
 );
 const normalized = value => String(value ?? '').trim();
+const validDate = value => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
+function parseDirectoryQuery(query) {
+  const role = query.role === undefined || query.role === '' ? null : query.role;
+  if (role !== null && !['admin', 'ngo', 'donor'].includes(role)) return { error: 'Role must be admin, donor, or ngo.' };
+  const directoryOnly = query.directory === 'true';
+  if (query.directory !== undefined && !['true', 'false'].includes(query.directory)) return { error: 'Directory filter is invalid.' };
+  if (directoryOnly && !['donor', 'ngo'].includes(role)) return { error: 'Directory mode requires a donor or NGO role.' };
+  const limitRaw = query.limit === undefined ? '25' : String(query.limit);
+  if (!/^\d+$/.test(limitRaw) || Number(limitRaw) < 1 || Number(limitRaw) > MAX_PAGE_SIZE) return { error: `Limit must be between 1 and ${MAX_PAGE_SIZE}.` };
+  const limit = Number(limitRaw);
+  let pageNumber = 1;
+  let offset = 0;
+  if (query.page !== undefined) {
+    if (query.offset !== undefined || !/^\d+$/.test(String(query.page)) || Number(query.page) < 1) return { error: 'Page must be a positive integer and cannot be combined with offset.' };
+    pageNumber = Number(query.page);
+    offset = (pageNumber - 1) * limit;
+  } else if (query.offset !== undefined) {
+    if (!/^\d+$/.test(String(query.offset))) return { error: 'Offset must be a non-negative integer.' };
+    offset = Number(query.offset);
+    pageNumber = Math.floor(offset / limit) + 1;
+  }
+  if (!Number.isSafeInteger(offset) || offset > MAX_PAGE_OFFSET) return { error: `The requested page is too far into the results. Maximum offset is ${MAX_PAGE_OFFSET}.` };
+
+  const status = query.status === undefined || query.status === '' || query.status === 'all' ? null : query.status;
+  if (status && !VALID_STATUSES.has(status)) return { error: 'Status filter is invalid.' };
+  const category = query.category === undefined || query.category === '' || query.category === 'all' ? null : query.category;
+  if (category && (role !== 'donor' || !BUSINESS_ROLES.includes(category))) return { error: 'Business type filter is invalid.' };
+  const sort = query.sort === undefined ? 'created' : query.sort;
+  if (!VALID_SORTS.has(sort)) return { error: 'Sort field is invalid.' };
+  const direction = query.direction === undefined ? 'desc' : query.direction;
+  if (!['asc', 'desc'].includes(direction)) return { error: 'Sort direction is invalid.' };
+  if (query.verified !== undefined && !['true', 'false'].includes(query.verified)) return { error: 'Verification filter is invalid.' };
+  if (query.warned !== undefined && !['true', 'false'].includes(query.warned)) return { error: 'Warning filter is invalid.' };
+  const q = normalized(query.q);
+  if (q.length > 100) return { error: 'Search must be 100 characters or fewer.' };
+  const from = query.from === undefined || query.from === '' ? null : query.from;
+  const to = query.to === undefined || query.to === '' ? null : query.to;
+  if ((from && !validDate(from)) || (to && !validDate(to))) return { error: 'Date filters must use a real calendar date in YYYY-MM-DD format.' };
+  return { value: { role, directoryOnly, limit, page: pageNumber, offset, status, category, sort, direction, verified: query.verified, warned: query.warned, q, from, to } };
+}
+
+const csvCell = value => {
+  const text = String(value ?? '');
+  const safe = /^[\s\uFEFF]*[=+@-]/u.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
+};
+
+async function writeCsvStream(response, stream, columns) {
+  const write = async text => {
+    if (response.destroyed) return false;
+    if (response.write(text)) return true;
+    return new Promise(resolve => {
+      const done = value => {
+        response.off('drain', onDrain);
+        response.off('close', onClose);
+        resolve(value);
+      };
+      const onDrain = () => done(true);
+      const onClose = () => done(false);
+      response.once('drain', onDrain);
+      response.once('close', onClose);
+    });
+  };
+  if (!await write(`${columns.map(csvCell).join(',')}\r\n`)) return;
+  for await (const row of stream) {
+    if (!await write(`${columns.map(([, key]) => csvCell(row[key])).join(',')}\r\n`)) {
+      stream.destroy();
+      return;
+    }
+  }
+}
 
 exports.list = async (req, res, next) => {
   try {
-    const { limit, offset } = page(req.query);
-    const role = ['admin', 'ngo', 'donor'].includes(req.query.role) ? req.query.role : null;
-    const status = ['active', 'pending', 'suspended', 'deleted', 'rejected'].includes(req.query.status) ? req.query.status : null;
-    const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : null;
-    const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : null;
-    const result = await Account.list({ q: normalized(req.query.q).slice(0, 100), role, status, verified: req.query.verified, warned: req.query.warned, from, to, limit, offset });
-    return res.json({ success: true, accounts: result.rows, total: result.total, limit, offset, summary: await Account.summary() });
+    const parsed = parseDirectoryQuery(req.query);
+    if (parsed.error) return res.status(400).json({ success: false, message: parsed.error });
+    const filters = parsed.value;
+    const result = await Account.list(filters);
+    const totalPages = Math.ceil(result.total / filters.limit);
+    return res.json({ success: true, accounts: result.rows, total: result.total, page: filters.page, pageSize: filters.limit, totalPages, limit: filters.limit, offset: filters.offset, summary: await Account.summary() });
   } catch (error) { next(error); }
+};
+
+exports.exportCsv = async (req, res, next) => {
+  const exportFilters = { ...req.query };
+  delete exportFilters.page;
+  delete exportFilters.offset;
+  delete exportFilters.limit;
+  const parsed = parseDirectoryQuery({ ...exportFilters, limit: '25' });
+  if (parsed.error) return res.status(400).json({ success: false, message: parsed.error });
+  const filters = parsed.value;
+  if (!['donor', 'ngo'].includes(filters.role)) return res.status(400).json({ success: false, message: 'Choose the donor or NGO directory to export.' });
+  let stream;
+  try {
+    await ActivityLog.create({ actorUserId: req.user.id, action: 'account_directory_export', entityType: filters.role, details: { searchUsed: Boolean(filters.q), status: filters.status, category: filters.category }, ipAddress: req.ip });
+    const prefix = filters.role === 'ngo' ? 'food-rescue-ngos' : 'food-rescue-donors';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${prefix}.csv"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'no-store');
+    res.write('\uFEFF');
+    const columns = filters.role === 'ngo'
+      ? [['Organization', 'display_name'], ['Contact', 'contact_name'], ['Email', 'email'], ['Phone', 'mobile'], ['City', 'city'], ['State', 'state'], ['Verification', 'is_verified'], ['Status', 'account_status'], ['Donations claimed', 'claimed_count'], ['Registered', 'created_at']]
+      : [['Donor', 'display_name'], ['Business type', 'category'], ['Email', 'email'], ['Phone', 'mobile'], ['City', 'city'], ['State', 'state'], ['Donations posted', 'donation_count'], ['Status', 'account_status'], ['Joined', 'created_at']];
+    stream = Account.streamDirectory(filters);
+    await writeCsvStream(res, stream, columns);
+    if (!res.destroyed) res.end();
+  } catch (error) {
+    stream?.destroy();
+    if (res.headersSent) return res.destroy(error);
+    next(error);
+  }
 };
 
 exports.details = async (req, res, next) => {
