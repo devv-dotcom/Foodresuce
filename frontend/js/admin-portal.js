@@ -169,9 +169,14 @@ async function verifySelectedAccount(event) {
   try {
     setLoading(button, true, 'Verifying…');
     const result = await request(`/api/admin/accounts/${encodeURIComponent(account.id)}/verification`, { method: 'PUT', body: { verified: true } });
+    accountState.selected = {
+      ...account,
+      is_verified: true,
+      history: [{ action: 'account_verified', details_json: { role: account.role }, created_at: new Date().toISOString() }, ...(account.history || [])]
+    };
+    renderAccountDetails(accountState.selected);
     toast(result.message || 'Account verified.', 'success');
     await loadAccounts();
-    await openAccount(account.id);
   } catch (error) {
     notifyError(error);
   } finally {
