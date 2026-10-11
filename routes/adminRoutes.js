@@ -19,6 +19,7 @@ router.get('/accounts', accounts.list);
 router.get('/accounts/:id', accounts.details);
 router.put('/accounts/:id', accounts.update);
 router.put('/accounts/:id/status', accounts.setStatus);
+router.put('/accounts/:id/verification', accounts.setVerification);
 router.post('/accounts/:id/warnings', accounts.warn);
 router.delete('/accounts/:id', accounts.remove);
 router.get('/dashboard', dashboard.getDashboard);

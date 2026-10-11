@@ -124,6 +124,32 @@ exports.setStatus = async (req, res, next) => {
   } catch (error) { if (connection) await connection.rollback(); next(error); } finally { connection?.release(); }
 };
 
+exports.setVerification = async (req, res, next) => {
+  if (!validId(req.params.id)) return res.status(400).json({ success: false, message: 'A valid account ID is required.' });
+  if (req.body.verified !== true) return res.status(422).json({ success: false, message: 'Verification must be explicitly confirmed.' });
+  const id = Number(req.params.id);
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [rows] = await connection.execute('SELECT id, role, account_status, is_verified FROM users WHERE id = ? FOR UPDATE', [id]);
+    const account = rows[0];
+    if (!account || (!isDonor(account.role) && account.role !== 'ngo') || account.account_status === 'deleted') {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'Verifiable donor or NGO account not found.' });
+    }
+    if (account.is_verified) {
+      await connection.rollback();
+      return res.json({ success: true, message: 'This account is already verified.' });
+    }
+    await connection.execute('UPDATE users SET is_verified = TRUE WHERE id = ?', [id]);
+    await audit(connection, req, 'account_verified', id, { role: account.role });
+    await connection.commit();
+    return res.json({ success: true, message: 'Account verified successfully.' });
+  } catch (error) { if (connection) await connection.rollback(); next(error); }
+  finally { connection?.release(); }
+};
+
 exports.remove = async (req, res, next) => {
   if (!validId(req.params.id)) return res.status(400).json({ success: false, message: 'A valid account ID is required.' });
   const id = Number(req.params.id);

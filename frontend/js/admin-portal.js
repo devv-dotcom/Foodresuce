@@ -1,5 +1,5 @@
 import { request, notifyError, getSession } from './api.js';
-import { $, $$, escapeHtml, toast } from './utils.js';
+import { $, $$, escapeHtml, setLoading, toast } from './utils.js';
 
 // Admin lists start empty and are populated only by protected API responses.
 const state = { donations: [], ngos: [], donors: [], pickups: [], alerts: [], activityLogs: [] };
@@ -58,6 +58,7 @@ function initAccountManagement() {
   $('#account-edit-button')?.addEventListener('click', openEditDialog);
   $('#account-warn-button')?.addEventListener('click', () => $('#account-warning-dialog')?.showModal());
   $('#account-status-button')?.addEventListener('click', openStatusDialog);
+  $('#account-verify-button')?.addEventListener('click', verifySelectedAccount);
   $('#account-delete-button')?.addEventListener('click', openDeleteDialog);
   $('#account-edit-form')?.addEventListener('submit', saveAccount);
   $('#account-warning-form')?.addEventListener('submit', issueAccountWarning);
@@ -118,7 +119,7 @@ function renderAccounts(summary) {
   tbody.innerHTML = accountState.rows.map(account => `<tr>
     <td>#${escapeHtml(account.id)}</td><td><strong>${escapeHtml(account.ngo_name || account.business_name || account.full_name)}</strong><br><span class="account-muted">${escapeHtml(account.email)}</span></td>
     <td>${displayRole(account.role)}</td><td><span class="account-status-pill status-${escapeHtml(account.account_status || 'active')}">${escapeHtml(account.account_status || 'active')}</span></td>
-    <td>${account.is_verified ? 'Verified' : 'Not verified'}</td><td>${formatDate(account.created_at)}</td><td>${Number(account.donation_count || 0).toLocaleString()}</td><td>${Number(account.warning_count || 0).toLocaleString()}</td>
+    <td><span class="account-verification-pill ${account.is_verified ? 'is-verified' : 'is-unverified'}">${account.is_verified ? 'Verified' : 'Not verified'}</span></td><td>${formatDate(account.created_at)}</td><td>${Number(account.donation_count || 0).toLocaleString()}</td><td>${Number(account.warning_count || 0).toLocaleString()}</td>
     <td><button class="btn-secondary account-view-button" type="button" data-account-action="view" data-account-id="${escapeHtml(account.id)}">View</button></td></tr>`).join('');
   if (!accountState.rows.length) tbody.innerHTML = '<tr><td colspan="9" class="account-empty">No matching accounts.</td></tr>';
   const summaryIds = { total: 'accounts-total', active: 'accounts-active', pending: 'accounts-pending', suspended: 'accounts-suspended', warned: 'accounts-warned' };
@@ -146,7 +147,7 @@ function renderAccountDetails(account) {
   const displayRole = account.role === 'ngo' || account.role === 'admin' ? account.role.toUpperCase() : 'Donor';
   $('#account-detail-title').textContent = account.ngo_name || account.business_name || account.full_name;
   $('#account-detail-subtitle').textContent = `${displayRole} · Account #${account.id} · ${account.email}`;
-  const fields = [['Name', account.full_name], ['Email', account.email], ['Phone', account.mobile], ['Role', displayRole], ['Status', account.account_status], ['Verified', account.is_verified ? 'Yes' : 'No'], ['Registered', account.created_at ? new Date(account.created_at).toLocaleString() : 'Unavailable'], ['Last login', account.last_login_at ? new Date(account.last_login_at).toLocaleString() : 'Unavailable'], ['Location', [account.city, account.state].filter(Boolean).join(', ') || 'Unavailable'], ['Warnings', account.warning_count], ['Last account activity', account.last_account_activity ? new Date(account.last_account_activity).toLocaleString() : 'Unavailable']];
+  const fields = [['Name', account.full_name], ['Email', account.email], ['Phone', account.mobile], ['Role', displayRole], ['Status', account.account_status], ['Verification', account.is_verified ? 'Verified' : 'Not verified'], ['Registered', account.created_at ? new Date(account.created_at).toLocaleString() : 'Unavailable'], ['Last login', account.last_login_at ? new Date(account.last_login_at).toLocaleString() : 'Unavailable'], ['Location', [account.city, account.state].filter(Boolean).join(', ') || 'Unavailable'], ['Warnings', account.warning_count], ['Last account activity', account.last_account_activity ? new Date(account.last_account_activity).toLocaleString() : 'Unavailable']];
   if (account.role === 'ngo') fields.push(['NGO', account.ngo_name], ['Registration number', account.registration_number]);
   if (account.role !== 'ngo' && account.role !== 'admin') fields.push(['Business type', account.role], ['Donations', account.donation_count]);
   $('#account-detail-profile').innerHTML = fields.map(([label, value]) => `<div class="account-detail-field"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? 'Unavailable')}</strong></div>`).join('');
@@ -155,8 +156,27 @@ function renderAccountDetails(account) {
   $('#account-audit-history').innerHTML = (account.history || []).map(item => `<article class="account-history-item"><strong>${escapeHtml(item.action.replaceAll('_', ' '))}</strong><p>${escapeHtml(typeof item.details_json === 'string' ? item.details_json : JSON.stringify(item.details_json || {}))}</p><span>${item.created_at ? new Date(item.created_at).toLocaleString() : '—'}</span></article>`).join('') || '<p class="account-muted">No administrative actions recorded.</p>';
   const editable = account.role !== 'admin' && account.role !== 'volunteer' && account.account_status !== 'deleted';
   ['#account-edit-button', '#account-warn-button', '#account-delete-button'].forEach(selector => { $(selector).hidden = !editable; });
+  const canVerify = account.role === 'ngo' || ['restaurant', 'hotel', 'bakery', 'supermarket', 'catering', 'marriage_hall'].includes(account.role);
+  $('#account-verify-button').hidden = !canVerify || Boolean(account.is_verified) || account.account_status === 'deleted';
   $('#account-status-button').hidden = !['active', 'suspended'].includes(account.account_status) || (account.role === 'admin' && Number(account.id) === Number(getSession()?.user?.id));
   $('#account-status-button').textContent = account.account_status === 'suspended' ? 'Restore account' : 'Suspend account';
+}
+
+async function verifySelectedAccount(event) {
+  const account = accountState.selected;
+  const button = event.currentTarget;
+  if (!account || button.disabled) return;
+  try {
+    setLoading(button, true, 'Verifying…');
+    const result = await request(`/api/admin/accounts/${encodeURIComponent(account.id)}/verification`, { method: 'PUT', body: { verified: true } });
+    toast(result.message || 'Account verified.', 'success');
+    await loadAccounts();
+    await openAccount(account.id);
+  } catch (error) {
+    notifyError(error);
+  } finally {
+    setLoading(button, false);
+  }
 }
 
 function openEditDialog() {

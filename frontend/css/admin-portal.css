@@ -1755,6 +1755,7 @@ body.admin-dashboard-body {
 .account-table td{vertical-align:middle}
 .account-muted{color:var(--muted-color,#64748b);font-size:.82rem}
 .account-status-pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.76rem;font-weight:700;text-transform:capitalize}
+.account-verification-pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;font-size:.76rem;font-weight:700;white-space:nowrap}.account-verification-pill.is-verified{background:#dcfce7;color:#166534}.account-verification-pill.is-unverified{background:#fef3c7;color:#92400e}
 .account-status-pill.status-active{background:#dcfce7;color:#166534}.account-status-pill.status-pending{background:#fef3c7;color:#92400e}.account-status-pill.status-suspended,.account-status-pill.status-rejected{background:#fee2e2;color:#991b1b}.account-status-pill.status-deleted{background:#e2e8f0;color:#475569}
 .account-view-button{padding:7px 12px;min-height:36px}.account-empty{text-align:center;padding:28px!important;color:var(--muted-color,#64748b)}
 .account-pagination{gap:16px}.account-pagination .page-btn:disabled{opacity:.45;cursor:not-allowed}

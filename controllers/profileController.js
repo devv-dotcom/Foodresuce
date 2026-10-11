@@ -6,13 +6,12 @@ exports.getProfile = async (req, res, next) => {
     const user = await User.findPublicById(req.user.id);
     if (!user) return res.status(404).json({ success: false, message: 'Profile not found.' });
 
-    let isVerified = true;
+    const isVerified = Boolean(user.is_verified);
     let isActive = true;
 
     if (user.role === 'ngo') {
-      const [rows] = await pool.execute(`SELECT is_verified, account_status FROM ngos WHERE user_id = ? LIMIT 1`, [user.id]);
+      const [rows] = await pool.execute(`SELECT account_status FROM ngos WHERE user_id = ? LIMIT 1`, [user.id]);
       if (rows[0]) {
-        isVerified = Boolean(rows[0].is_verified);
         isActive = !['rejected', 'suspended'].includes(rows[0].account_status);
       }
     }
