@@ -54,7 +54,9 @@ module.exports = {
     if (!account) return null;
     const [warnings] = await pool.execute(`SELECT w.id, w.category, w.reason, w.severity, w.status, w.created_at, w.related_donation_id, u.full_name AS admin_name
       FROM account_warnings w LEFT JOIN users u ON u.id = w.issued_by_user_id WHERE w.target_user_id = ? ORDER BY w.created_at DESC LIMIT 50`, [userId]);
-    const [history] = await pool.execute(`SELECT action, details_json, created_at FROM activity_logs WHERE entity_type = 'account' AND entity_id = ? ORDER BY created_at DESC LIMIT 50`, [userId]);
+    const [history] = await pool.execute(`SELECT action, details_json, created_at FROM activity_logs
+      WHERE entity_type = 'account' AND entity_id = ? AND action <> 'account_sensitive_view'
+      ORDER BY created_at DESC LIMIT 50`, [userId]);
     let donations = [];
     if (BUSINESS_ROLES.includes(account.role)) {
       [donations] = await pool.execute(`SELECT d.id, d.food_name, d.quantity, d.status, d.created_at, d.expiry_time,
