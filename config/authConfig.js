@@ -1,8 +1,12 @@
 'use strict';
 
-// Sign-in OTP stays paused unless a deployment explicitly opts in.
+// Keep sign-in OTP opt-in for local development, but require it in production
+// unless the deployment explicitly disables it.
 function isLoginOtpEnabled() {
-  return String(process.env.LOGIN_OTP_ENABLED || '').trim().toLowerCase() === 'true';
+  const configured = String(process.env.LOGIN_OTP_ENABLED || '').trim().toLowerCase();
+  if (configured === 'true') return true;
+  if (configured === 'false') return false;
+  return String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
 }
 
 module.exports = { isLoginOtpEnabled };

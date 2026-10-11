@@ -45,9 +45,9 @@ See `.env.example` for the complete list. Required settings include:
 - `JWT_SECRET`, a long random value.
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD` for the single administrator account. The server provisions that account on startup; administrator sign-in does not use OTP. After changing credentials or repairing setup, run `npm run admin:setup` from the project root. It uses the same `.env` loading order as the server, hashes the password, refuses to promote an email already used by a non-admin, and preserves an existing inactive admin status.
 - `RESEND_API_KEY` and `MAIL_FROM` for Resend email delivery. `MAIL_FROM` must use a verified sender domain. Brevo is retained as an optional fallback.
-- Sign-in OTP is temporarily paused by default; set `LOGIN_OTP_ENABLED=true` to require emailed codes again after sender delivery is working. Password recovery codes remain enabled.
+- Sign-in OTP is enabled by default in production and disabled by default in development/test. Set `LOGIN_OTP_ENABLED=false` to explicitly disable it in production, or `true` to enable it elsewhere. Password recovery codes remain enabled.
 
-Donor and NGO sign-ins use a one-time email code only when `LOGIN_OTP_ENABLED=true`. With the default paused setting, users sign in with email and password. Password recovery codes remain enabled.
+Donor and NGO sign-ins use a one-time email code in production. Ensure the selected mail provider API key and verified `MAIL_FROM` sender are configured before deployment. Password recovery codes remain enabled.
 
 ## Checks
 

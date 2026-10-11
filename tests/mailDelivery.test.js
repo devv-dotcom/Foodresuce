@@ -222,7 +222,7 @@ test('enabled NGO login requires the Brevo-delivered OTP before issuing a sessio
 
   process.env.NODE_ENV = 'production';
   process.env.MAIL_PROVIDER = 'brevo';
-  process.env.LOGIN_OTP_ENABLED = 'true';
+  delete process.env.LOGIN_OTP_ENABLED;
   process.env.JWT_SECRET = 'login-otp-brevo-test-secret';
   process.env.BREVO_API_KEY = 'brevo-test-key';
   process.env.RESEND_API_KEY = 'resend-test-key';
