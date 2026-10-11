@@ -770,46 +770,79 @@ function updateAnalyticsCharts(analytics = {}) {
    13. BACKEND API INTEGRATION (OPTIONAL REFRESH)
    ============================================================ */
 async function fetchBackendData() {
-  try {
-    const [dashboard, donationsResponse, businessesResponse, ngosResponse, notificationsResponse, logsResponse, analyticsResponse, userNotifications, pickupsResponse] = await Promise.all([
-      request('/api/admin/dashboard'), request('/api/admin/donations?limit=100'), request('/api/admin/businesses?limit=100'),
-      request('/api/admin/ngos?limit=100'), request('/api/admin/notifications?limit=50'), request('/api/admin/activity-logs?limit=50'), request('/api/admin/analytics'), request('/api/notifications'), request('/api/admin/pickups?limit=100')
-    ]);
-    const unreadCount = Number(userNotifications.unreadCount || 0);
-    ['#sidebar-notif-count', '#topbar-notif-badge'].forEach(selector => {
-      const badge = $(selector);
-      if (badge) { badge.textContent = String(unreadCount); badge.hidden = unreadCount === 0; }
-    });
-    if (dashboard?.dashboard) {
-      const metrics = dashboard.dashboard;
-      $('#kpi-total-donations').textContent = Number(metrics.total_donations || 0).toLocaleString();
-      $('#kpi-food-rescued').textContent = Number(metrics.meals_rescued || 0).toLocaleString();
-      $('#kpi-registered-ngos').textContent = Number(metrics.total_ngos || 0).toLocaleString();
-      $('#kpi-active-rescues').textContent = Number(metrics.pending_deliveries || 0).toLocaleString();
-      $('#kpi-completed-pickups').textContent = Number(metrics.completed_deliveries || 0).toLocaleString();
-      $('#sidebar-donations-count').textContent = Number(metrics.total_donations || 0).toLocaleString();
-      $('#sidebar-rescued-value').textContent = `${Number(metrics.meals_rescued || 0).toLocaleString()} meals served`;
-    }
-    if (analyticsResponse?.analytics?.liveStatus) $('#kpi-active-donations').textContent = Number(analyticsResponse.analytics.liveStatus.available_donations || 0).toLocaleString();
-    updateAnalyticsCharts(analyticsResponse?.analytics || {});
-    const safeDate = value => value ? new Date(value).toLocaleDateString() : '—';
-    state.donations = (donationsResponse.donations || []).map(d => ({ id: String(d.id), donor: d.business_name || 'Business partner', foodName: d.food_name || 'Food donation', category: d.category_name || 'Uncategorised', quantity: d.quantity || '—', location: d.pickup_city || d.business_city || '—', postedDate: safeDate(d.created_at), expiryText: d.expiry_time ? `Recorded deadline: ${safeDate(d.expiry_time)}` : 'Deadline unavailable', assignedNgo: d.ngo_name || 'Unassigned', status: d.status || 'available' }));
-    state.donors = (businessesResponse.businesses || []).map(b => ({ id: String(b.id), name: b.business_name || b.full_name || 'Business partner', category: b.role || 'business', email: b.email || '—', phone: b.mobile || '—', location: b.city || '—', totalDonations: null, status: b.account_status || 'pending', regDate: safeDate(b.created_at) }));
-    const mappedNgos = (ngosResponse.ngos || []).map(n => ({ id: String(n.id), name: n.ngo_name || n.full_name || 'NGO', contactPerson: n.full_name || '—', email: n.email || '—', phone: n.mobile || '—', location: n.city || '—', taxId: n.registration_number || '—', status: n.account_status === 'active' ? 'verified' : (n.account_status || 'pending'), claimedCount: null, regDate: safeDate(n.created_at) }));
-    state.pendingNgos = mappedNgos.filter(n => n.status === 'pending');
-    state.ngos = mappedNgos.filter(n => n.status !== 'pending');
-    const pickupStep = status => ['delivered', 'completed'].includes(status) ? 3 : ['pickup_started', 'food_collected', 'on_the_way'].includes(status) ? 2 : ['pickup_scheduled', 'volunteer_assigned'].includes(status) ? 1 : 0;
-    state.pickups = (pickupsResponse.pickups || []).map(p => ({ id: String(p.id), donationId: String(p.donation_id), donorName: p.donor_name || 'Unavailable', ngoName: p.ngo_name || 'Unavailable', receiverName: p.distribution_location || 'Unavailable', eta: p.updated_at ? safeDate(p.updated_at) : 'Unavailable', step: pickupStep(p.status), status: p.status === 'volunteer_assigned' ? 'pickup_scheduled' : p.status }));
-    const pickupSummary = pickupsResponse.summary || {};
-    $('#pickup-count-pending').textContent = Number(pickupSummary.pending || 0).toLocaleString();
-    $('#pickup-count-assigned').textContent = Number(pickupSummary.assigned || 0).toLocaleString();
-    $('#pickup-count-progress').textContent = Number(pickupSummary.in_progress || 0).toLocaleString();
-    $('#pickup-count-today').textContent = Number(pickupSummary.completed_today || 0).toLocaleString();
-    state.alerts = (notificationsResponse.notifications || []).map(n => ({ id: String(n.id), priority: n.notification_type === 'urgent' ? 'high' : 'low', title: n.title || 'Food Rescue alert', body: n.message || '', time: safeDate(n.created_at || n.createdAt) }));
-    state.activityLogs = (logsResponse.logs || []).map(l => ({ actor: l.actor_name || l.actor || 'System', action: l.action || 'Activity recorded', time: safeDate(l.created_at) }));
-    renderAllDonations(); renderPendingNgos(); renderAllNgos(); renderDonors(); renderPickupsTimeline(); renderAlertFeed(); renderActivityLogs();
-  } catch (err) {
-    console.error('Admin data could not be loaded.', err);
-    notifyError(err);
+  const endpoints = [
+    ['/api/admin/dashboard', '/api/admin/dashboard'],
+    ['/api/admin/donations?limit=100', '/api/admin/donations'],
+    ['/api/admin/businesses?limit=100', '/api/admin/businesses'],
+    ['/api/admin/ngos?limit=100', '/api/admin/ngos'],
+    ['/api/admin/notifications?limit=50', '/api/admin/notifications'],
+    ['/api/admin/activity-logs?limit=50', '/api/admin/activity-logs'],
+    ['/api/admin/analytics', '/api/admin/analytics'],
+    ['/api/notifications', '/api/notifications'],
+    ['/api/admin/pickups?limit=100', '/api/admin/pickups']
+  ];
+  const results = await Promise.allSettled(endpoints.map(([path]) => request(path)));
+  const responses = Object.fromEntries(results.map((result, index) => {
+    if (result.status === 'fulfilled') return [endpoints[index][1], result.value];
+    console.warn(`Admin panel data unavailable (${endpoints[index][1]}).`, result.reason);
+    return [endpoints[index][1], null];
+  }));
+  const dashboard = responses['/api/admin/dashboard'];
+  const donationsResponse = responses['/api/admin/donations'];
+  const businessesResponse = responses['/api/admin/businesses'];
+  const ngosResponse = responses['/api/admin/ngos'];
+  const notificationsResponse = responses['/api/admin/notifications'];
+  const logsResponse = responses['/api/admin/activity-logs'];
+  const analyticsResponse = responses['/api/admin/analytics'];
+  const userNotifications = responses['/api/notifications'];
+  const pickupsResponse = responses['/api/admin/pickups'];
+
+  if (!dashboard) {
+    ['#kpi-total-donations', '#kpi-food-rescued', '#kpi-registered-ngos', '#kpi-active-rescues', '#kpi-completed-pickups', '#sidebar-donations-count', '#sidebar-rescued-value']
+      .forEach(selector => { const element = $(selector); if (element) element.textContent = 'Unavailable'; });
+    notifyError(results[0].reason);
   }
+  const safe = response => response || {};
+  const metricsResponse = safe(dashboard);
+  const donationsData = safe(donationsResponse);
+  const businessesData = safe(businessesResponse);
+  const ngosData = safe(ngosResponse);
+  const notificationsData = safe(notificationsResponse);
+  const logsData = safe(logsResponse);
+  const analyticsData = safe(analyticsResponse);
+  const userNotificationsData = safe(userNotifications);
+  const pickupsData = safe(pickupsResponse);
+  const metrics = metricsResponse.dashboard;
+  if (metrics) {
+    $('#kpi-total-donations').textContent = Number(metrics.total_donations || 0).toLocaleString();
+    $('#kpi-food-rescued').textContent = Number(metrics.meals_rescued || 0).toLocaleString();
+    $('#kpi-registered-ngos').textContent = Number(metrics.total_ngos || 0).toLocaleString();
+    $('#kpi-active-rescues').textContent = Number(metrics.pending_deliveries || 0).toLocaleString();
+    $('#kpi-completed-pickups').textContent = Number(metrics.completed_deliveries || 0).toLocaleString();
+    $('#sidebar-donations-count').textContent = Number(metrics.total_donations || 0).toLocaleString();
+    $('#sidebar-rescued-value').textContent = `${Number(metrics.meals_rescued || 0).toLocaleString()} meals served`;
+  }
+  const unreadCount = Number(userNotificationsData.unreadCount || 0);
+  ['#sidebar-notif-count', '#topbar-notif-badge'].forEach(selector => {
+    const badge = $(selector);
+    if (badge) { badge.textContent = String(unreadCount); badge.hidden = unreadCount === 0; }
+  });
+  if (analyticsData.analytics?.liveStatus) $('#kpi-active-donations').textContent = Number(analyticsData.analytics.liveStatus.available_donations || 0).toLocaleString();
+  updateAnalyticsCharts(analyticsData.analytics || {});
+  const safeDate = value => value ? new Date(value).toLocaleDateString() : '—';
+  state.donations = (donationsData.donations || []).map(d => ({ id: String(d.id), donor: d.business_name || 'Business partner', foodName: d.food_name || 'Food donation', category: d.category_name || 'Uncategorised', quantity: d.quantity || '—', location: d.pickup_city || d.business_city || '—', postedDate: safeDate(d.created_at), expiryText: d.expiry_time ? `Recorded deadline: ${safeDate(d.expiry_time)}` : 'Deadline unavailable', assignedNgo: d.ngo_name || 'Unassigned', status: d.status || 'available' }));
+  state.donors = (businessesData.businesses || []).map(b => ({ id: String(b.id), name: b.business_name || b.full_name || 'Business partner', category: b.role || 'business', email: b.email || '—', phone: b.mobile || '—', location: b.city || '—', totalDonations: null, status: b.account_status || 'pending', regDate: safeDate(b.created_at) }));
+  const mappedNgos = (ngosData.ngos || []).map(n => ({ id: String(n.id), name: n.ngo_name || n.full_name || 'NGO', contactPerson: n.full_name || '—', email: n.email || '—', phone: n.mobile || '—', location: n.city || '—', taxId: n.registration_number || '—', status: n.account_status === 'active' ? 'verified' : (n.account_status || 'pending'), claimedCount: null, regDate: safeDate(n.created_at) }));
+  state.pendingNgos = mappedNgos.filter(n => n.status === 'pending');
+  state.ngos = mappedNgos.filter(n => n.status !== 'pending');
+  const pickupStep = status => ['delivered', 'completed'].includes(status) ? 3 : ['pickup_started', 'food_collected', 'on_the_way'].includes(status) ? 2 : ['pickup_scheduled', 'volunteer_assigned'].includes(status) ? 1 : 0;
+  state.pickups = (pickupsData.pickups || []).map(p => ({ id: String(p.id), donationId: String(p.donation_id), donorName: p.donor_name || 'Unavailable', ngoName: p.ngo_name || 'Unavailable', receiverName: p.distribution_location || 'Unavailable', eta: p.updated_at ? safeDate(p.updated_at) : 'Unavailable', step: pickupStep(p.status), status: p.status === 'volunteer_assigned' ? 'pickup_scheduled' : p.status }));
+  const pickupSummary = pickupsData.summary || {};
+  $('#pickup-count-pending').textContent = Number(pickupSummary.pending || 0).toLocaleString();
+  $('#pickup-count-assigned').textContent = Number(pickupSummary.assigned || 0).toLocaleString();
+  $('#pickup-count-progress').textContent = Number(pickupSummary.in_progress || 0).toLocaleString();
+  $('#pickup-count-today').textContent = Number(pickupSummary.completed_today || 0).toLocaleString();
+  state.alerts = (notificationsData.notifications || []).map(n => ({ id: String(n.id), priority: n.notification_type === 'urgent' ? 'high' : 'low', title: n.title || 'Food Rescue alert', body: n.message || '', time: safeDate(n.created_at || n.createdAt) }));
+  state.activityLogs = (logsData.logs || []).map(l => ({ actor: l.actor_name || l.actor || 'System', action: l.action || 'Activity recorded', time: safeDate(l.created_at) }));
+  renderAllDonations(); renderPendingNgos(); renderAllNgos(); renderDonors(); renderPickupsTimeline(); renderAlertFeed(); renderActivityLogs();
 }

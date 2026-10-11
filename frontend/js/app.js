@@ -1,7 +1,7 @@
 import { initAuth, protectRoute } from './auth.js';
 import { initAdminIntegration } from './admin.js';
 import { initContactIntegration } from './contact.js';
-import { initBusinessDashboard, initNgoDashboard, initAdminDashboard } from './dashboard.js';
+import { initBusinessDashboard, initNgoDashboard } from './dashboard.js';
 import { initDonationIntegration } from './donation.js';
 import { initNgoIntegration } from './ngo.js';
 import { initProfileIntegration } from './profile.js';
@@ -45,7 +45,8 @@ const boot = async () => {
   ];
   if (dashboard === 'business') tasks.push(initBusinessDashboard());
   if (dashboard === 'ngo') tasks.push(initNgoDashboard());
-  if (dashboard === 'admin') tasks.push(initAdminDashboard());
+  // The admin portal owns the complete admin data load. Running the older
+  // dashboard loader as well duplicates the same requests and error toasts.
   if (document.querySelector('[data-notification-bell]')) tasks.push(initNotifications());
 
   await Promise.allSettled(tasks);
