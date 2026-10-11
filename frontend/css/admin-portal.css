@@ -1581,6 +1581,13 @@ body.admin-dashboard-body {
   animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+#modal-add-donor .modal-card { max-width: 760px; max-height: calc(100vh - 40px); overflow-y: auto; }
+#modal-add-donor .account-form-grid { padding: 22px 24px; }
+#modal-add-donor label { display: grid; gap: 6px; color: var(--text-main); font-size: .88rem; font-weight: 700; }
+#modal-add-donor input, #modal-add-donor select { width: 100%; min-width: 0; border: 1px solid var(--admin-border); border-radius: 9px; padding: 11px 12px; color: var(--text-main); background: var(--admin-surface); font: inherit; font-weight: 400; }
+#modal-add-donor .account-form-wide { grid-column: 1 / -1; }
+#donation-pagination-controls .page-btn:disabled { opacity: .45; cursor: not-allowed; }
+
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 

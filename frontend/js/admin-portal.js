@@ -2,7 +2,8 @@ import { request, notifyError, getSession } from './api.js';
 import { $, $$, escapeHtml, setLoading, toast } from './utils.js';
 
 // Admin lists start empty and are populated only by protected API responses.
-const state = { donations: [], ngos: [], donors: [], pickups: [], alerts: [], activityLogs: [] };
+const state = { donations: [], ngos: [], pendingNgos: [], donors: [], pickups: [], alerts: [], activityLogs: [], donationPage: 0 };
+const DONATIONS_PER_PAGE = 10;
 const accountState = { rows: [], total: 0, offset: 0, limit: 25, selected: null, action: null, timer: null };
 
 // Initialize Admin Dashboard Interactivity
@@ -336,20 +337,36 @@ function renderAllDonations() {
   const searchVal = $('#donation-search-input')?.value.toLowerCase() || '';
   const statusVal = $('#donation-status-filter')?.value || 'all';
   const locationVal = $('#donation-location-filter')?.value || 'all';
+  const dateVal = $('#donation-date-filter')?.value || 'all';
+  const sortVal = $('#donation-sort-filter')?.value || 'newest';
 
   const filtered = state.donations.filter(d => {
     const matchesSearch = d.id.toLowerCase().includes(searchVal) ||
                           d.donor.toLowerCase().includes(searchVal) ||
                           d.foodName.toLowerCase().includes(searchVal);
     const matchesStatus = statusVal === 'all' || d.status === statusVal;
-    const matchesLocation = locationVal === 'all' || d.location === locationVal;
-    return matchesSearch && matchesStatus && matchesLocation;
+    const matchesLocation = locationVal === 'all' || d.location.toLowerCase().includes(locationVal.toLowerCase());
+    const posted = d.postedAt ? new Date(d.postedAt) : null;
+    const age = posted && !Number.isNaN(posted.getTime()) ? Date.now() - posted.getTime() : Infinity;
+    const matchesDate = dateVal === 'all' || (dateVal === 'today' && posted?.toDateString() === new Date().toDateString()) ||
+      (dateVal === 'week' && age <= 7 * 86400000) || (dateVal === 'month' && age <= 31 * 86400000);
+    return matchesSearch && matchesStatus && matchesLocation && matchesDate;
   });
+  filtered.sort((a, b) => {
+    if (sortVal === 'quantity') return (Number(b.quantity) || 0) - (Number(a.quantity) || 0);
+    if (sortVal === 'expiry') return (a.expiryAt ? new Date(a.expiryAt).getTime() : Infinity) - (b.expiryAt ? new Date(b.expiryAt).getTime() : Infinity);
+    const timeA = a.postedAt ? new Date(a.postedAt).getTime() : 0;
+    const timeB = b.postedAt ? new Date(b.postedAt).getTime() : 0;
+    return sortVal === 'oldest' ? timeA - timeB : timeB - timeA;
+  });
+  const pageCount = Math.max(1, Math.ceil(filtered.length / DONATIONS_PER_PAGE));
+  state.donationPage = Math.min(state.donationPage, pageCount - 1);
+  const pageRows = filtered.slice(state.donationPage * DONATIONS_PER_PAGE, (state.donationPage + 1) * DONATIONS_PER_PAGE);
 
   // Render main donations table
   tbody.innerHTML = filtered.length === 0 
     ? `<tr><td colspan="10" style="text-align:center; padding:32px; color:#64748b;">No food donations match your filters.</td></tr>`
-    : filtered.map(d => {
+    : pageRows.map(d => {
         return `
           <tr>
             <td class="cell-id">${escapeHtml(d.id)}</td>
@@ -398,15 +415,54 @@ function renderAllDonations() {
   }
 
   // Update counts
-  if ($('#donation-showing-count')) $('#donation-showing-count').textContent = filtered.length ? `1 - ${filtered.length}` : '0';
-  if ($('#donation-total-count')) $('#donation-total-count').textContent = state.donations.length;
+  const first = filtered.length ? state.donationPage * DONATIONS_PER_PAGE + 1 : 0;
+  const last = Math.min((state.donationPage + 1) * DONATIONS_PER_PAGE, filtered.length);
+  if ($('#donation-showing-count')) $('#donation-showing-count').textContent = filtered.length ? `${first}–${last}` : '0';
+  if ($('#donation-total-count')) $('#donation-total-count').textContent = filtered.length;
+  const pageLabel = $('#donation-page-label');
+  if (pageLabel) pageLabel.textContent = `Page ${state.donationPage + 1} of ${pageCount}`;
+  const previous = $('#donation-pagination-controls [data-page-action="previous"]');
+  const next = $('#donation-pagination-controls [data-page-action="next"]');
+  if (previous) previous.disabled = state.donationPage === 0;
+  if (next) next.disabled = state.donationPage >= pageCount - 1;
+}
+
+function downloadCsv(filename, rows) {
+  if (!rows.length) { toast('There are no records to export.', 'info'); return; }
+  const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+  const csv = rows.map(row => row.map(quote).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
+  URL.revokeObjectURL(url);
+}
+
+function filteredDonations() {
+  const search = ($('#donation-search-input')?.value || '').trim().toLowerCase();
+  const status = $('#donation-status-filter')?.value || 'all';
+  const location = $('#donation-location-filter')?.value || 'all';
+  const date = $('#donation-date-filter')?.value || 'all';
+  const now = Date.now();
+  return state.donations.filter(d => {
+    const created = d.postedAt ? new Date(d.postedAt) : null;
+    const age = created && !Number.isNaN(created.getTime()) ? now - created.getTime() : Infinity;
+    return (!search || `${d.id} ${d.donor} ${d.foodName}`.toLowerCase().includes(search)) &&
+      (status === 'all' || d.status === status) &&
+      (location === 'all' || d.location.toLowerCase().includes(location.toLowerCase())) &&
+      (date === 'all' || (date === 'today' && created?.toDateString() === new Date().toDateString()) || (date === 'week' && age <= 7 * 86400000) || (date === 'month' && age <= 31 * 86400000));
+  });
 }
 
 window.viewDonationDetails = (id) => {
   const donation = state.donations.find(d => d.id === id);
-  if (donation) {
-    toast(`Viewing Details for ${donation.id}: ${donation.foodName} from ${donation.donor}`);
-  }
+  const body = $('#donation-details-modal-body');
+  if (!donation || !body) return;
+  const fields = [
+    ['Donation ID', donation.id], ['Donor', donation.donor], ['Food', donation.foodName],
+    ['Category', donation.category], ['Quantity', donation.quantity], ['Pickup location', donation.location],
+    ['Posted', donation.postedDate], ['Expiry', donation.expiryText], ['Assigned NGO', donation.assignedNgo], ['Status', donation.status]
+  ];
+  body.innerHTML = `<div class="account-detail-grid">${fields.map(([label, value]) => `<div class="account-detail-field"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || 'Unavailable')}</strong></div>`).join('')}</div>`;
+  $('#modal-donation-details')?.classList.add('show');
 };
 
 window.deleteDonation = async (id) => {
@@ -438,7 +494,7 @@ function renderAllNgos() {
     return matchesSearch && matchesStatus;
   });
 
-  tbody.innerHTML = filtered.map(n => `
+  tbody.innerHTML = filtered.length ? filtered.map(n => `
     <tr>
       <td>
         <div class="user-cell">
@@ -453,30 +509,36 @@ function renderAllNgos() {
         <span style="font-size:0.75rem; color:#64748b;">${escapeHtml(n.email)} &bull; ${escapeHtml(n.phone)}</span>
       </td>
       <td>📍 ${escapeHtml(n.location)}</td>
-      <td><span class="status-badge ${n.status}">${escapeHtml(n.status)}</span></td>
-      <td><strong>${n.claimedCount == null ? 'Unavailable' : `${Number(n.claimedCount).toLocaleString()} meals`}</strong></td>
+      <td><span class="status-badge ${n.isVerified ? 'verified' : 'pending'}">${n.isVerified ? 'Verified' : 'Not verified'}</span></td>
+      <td><strong>${Number(n.claimedCount || 0).toLocaleString()} donations claimed</strong></td>
       <td>${escapeHtml(n.regDate)}</td>
       <td><span class="status-badge ${n.status}">${escapeHtml(n.status)}</span></td>
       <td style="text-align: right;">
         <div class="action-buttons-group" style="justify-content: flex-end;">
           <button type="button" class="icon-action-btn" title="View Profile" onclick="window.viewNgoProfileModal('${n.id}', false)">👁️</button>
-          ${n.status === 'verified' 
+          ${!n.isVerified
+            ? `<button type="button" class="icon-action-btn success" title="Verify NGO account" onclick="window.toggleNgoStatus('${n.id}', 'verified')">✓</button>`
+            : n.status === 'active'
             ? `<button type="button" class="icon-action-btn danger" title="Suspend NGO" onclick="window.toggleNgoStatus('${n.id}', 'suspended')">⛔</button>` 
-            : `<button type="button" class="icon-action-btn success" title="Reactivate NGO" onclick="window.toggleNgoStatus('${n.id}', 'verified')">✓</button>`}
+            : `<button type="button" class="icon-action-btn success" title="Activate NGO" onclick="window.toggleNgoStatus('${n.id}', 'active')">✓</button>`}
         </div>
       </td>
     </tr>
-  `).join('');
+  `).join('') : `<tr><td colspan="8" class="account-empty">${state.ngos.length ? 'No NGOs match these filters.' : 'No active or suspended NGO accounts were returned.'}</td></tr>`;
 }
 
 window.toggleNgoStatus = async (id, newStatus) => {
   const ngo = state.ngos.find(n => n.id === id);
   if (ngo) {
     try {
-      const action = newStatus === 'suspended' ? 'suspend' : 'approve';
-      await request(`/api/admin/ngo/${action}/${encodeURIComponent(id)}`, { method: 'PUT' });
+      if (newStatus === 'verified') {
+        await request(`/api/admin/accounts/${encodeURIComponent(id)}/verification`, { method: 'PUT', body: { verified: true } });
+      } else {
+        const action = newStatus === 'suspended' ? 'suspend' : 'approve';
+        await request(`/api/admin/ngo/${action}/${encodeURIComponent(id)}`, { method: 'PUT' });
+      }
       await fetchBackendData();
-      toast(`NGO "${ngo.name}" status updated.`, 'success');
+      toast(newStatus === 'verified' ? `NGO "${ngo.name}" verified.` : `NGO "${ngo.name}" status updated.`, 'success');
     } catch (error) { notifyError(error); }
   }
 };
@@ -487,7 +549,7 @@ window.viewNgoProfileModal = (id, isPending) => {
   const footer = $('#ngo-profile-modal-footer');
   if (!modal || !body) return;
 
-  const item = state.ngos.find(n => n.id === id);
+  const item = [...state.ngos, ...(state.pendingNgos || [])].find(n => n.id === id);
 
   if (!item) return;
 
@@ -496,7 +558,7 @@ window.viewNgoProfileModal = (id, isPending) => {
       <div style="width:56px; height:56px; border-radius:50%; background:#ecfdf5; color:#059669; font-size:28px; display:grid; place-items:center;">🏛️</div>
       <div>
         <h3 style="font-size:1.2rem; font-weight:800; color:#0f172a;">${escapeHtml(item.name)}</h3>
-        <span class="status-badge ${item.status || 'active'}">${escapeHtml(item.status || 'active')}</span>
+        <span class="status-badge ${item.isVerified ? 'verified' : 'pending'}">${item.isVerified ? 'Verified' : 'Not verified'} · ${escapeHtml(item.status || 'pending')}</span>
       </div>
     </div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; background:#f8faf8; padding:16px; border-radius:12px;">
@@ -505,6 +567,7 @@ window.viewNgoProfileModal = (id, isPending) => {
       <div><strong>Phone:</strong><br>${escapeHtml(item.phone)}</div>
       <div><strong>Location:</strong><br>📍 ${escapeHtml(item.location)}</div>
       <div><strong>Registration number:</strong><br><code>${escapeHtml(item.taxId || 'Unavailable')}</code></div>
+      <div><strong>Donations claimed:</strong><br>${Number(item.claimedCount || 0).toLocaleString()}</div>
       <div><strong>Registered Date:</strong><br>${escapeHtml(item.regDate)}</div>
     </div>
   `;
@@ -532,7 +595,7 @@ function renderDonors() {
     return matchesSearch && matchesType;
   });
 
-  tbody.innerHTML = filtered.map(d => `
+  tbody.innerHTML = filtered.length ? filtered.map(d => `
     <tr>
       <td>
         <div class="user-cell">
@@ -545,15 +608,17 @@ function renderDonors() {
       <td><span style="text-transform:capitalize; font-weight:700;">${escapeHtml(d.category)}</span></td>
       <td>${escapeHtml(d.email)}<br><span style="font-size:0.75rem; color:#64748b;">${escapeHtml(d.phone)}</span></td>
       <td>📍 ${escapeHtml(d.location)}</td>
-      <td><strong>${d.totalDonations == null ? 'Unavailable' : `${Number(d.totalDonations).toLocaleString()} listings`}</strong></td>
-      <td><span class="status-badge verified">${escapeHtml(d.status)}</span></td>
+      <td><strong>${Number(d.totalDonations || 0).toLocaleString()} listings</strong></td>
+      <td><span class="status-badge ${escapeHtml(d.status)}">${escapeHtml(d.status)}</span></td>
       <td>${escapeHtml(d.regDate)}</td>
       <td style="text-align: right;">
-        <button type="button" class="icon-action-btn" title="View Donor">👁️</button>
+        <button type="button" class="icon-action-btn" title="View donor details" onclick="window.viewDonorAccount('${d.id}')">👁️</button>
       </td>
     </tr>
-  `).join('');
+  `).join('') : `<tr><td colspan="8" class="account-empty">${state.donors.length ? 'No donors match these filters.' : 'No donor accounts were returned.'}</td></tr>`;
 }
+
+window.viewDonorAccount = id => openAccount(id);
 
 /* ============================================================
    6. PICKUP & DELIVERY TIMELINE CARDS
@@ -658,15 +723,34 @@ function addAuditLog(actor, action) {
    9. SEARCH & FILTER EVENT LISTENERS
    ============================================================ */
 function initSearchAndFilters() {
-  $('#donation-search-input')?.addEventListener('input', renderAllDonations);
-  $('#donation-status-filter')?.addEventListener('change', renderAllDonations);
-  $('#donation-location-filter')?.addEventListener('change', renderAllDonations);
+  const refreshDonations = () => { state.donationPage = 0; renderAllDonations(); };
+  $('#donation-search-input')?.addEventListener('input', refreshDonations);
+  ['#donation-status-filter', '#donation-date-filter', '#donation-location-filter', '#donation-sort-filter'].forEach(selector => $(selector)?.addEventListener('change', refreshDonations));
+  $('#donation-pagination-controls')?.addEventListener('click', event => {
+    const action = event.target.closest('[data-page-action]')?.dataset.pageAction;
+    if (!action) return;
+    state.donationPage = Math.max(0, state.donationPage + (action === 'next' ? 1 : -1));
+    renderAllDonations();
+  });
+  $('#btn-export-donations-csv')?.addEventListener('click', () => downloadCsv('food-rescue-donations.csv', [
+    ['Donation ID', 'Donor', 'Food', 'Category', 'Quantity', 'Location', 'Posted', 'Expiry', 'Assigned NGO', 'Status'],
+    ...filteredDonations().map(d => [d.id, d.donor, d.foodName, d.category, d.quantity, d.location, d.postedDate, d.expiryText, d.assignedNgo, d.status])
+  ]));
+  $('#btn-export-ngos')?.addEventListener('click', () => downloadCsv('food-rescue-ngos.csv', [
+    ['Organization', 'Contact', 'Email', 'Phone', 'Location', 'Verification', 'Status', 'Donations claimed', 'Registered'],
+    ...state.ngos.map(n => [n.name, n.contactPerson, n.email, n.phone, n.location, n.isVerified ? 'Verified' : 'Not verified', n.status, n.claimedCount, n.regDate])
+  ]));
+  $('#btn-export-donors')?.addEventListener('click', () => downloadCsv('food-rescue-donors.csv', [
+    ['Donor', 'Business type', 'Email', 'Phone', 'Location', 'Donations posted', 'Status', 'Joined'],
+    ...state.donors.map(d => [d.name, d.category, d.email, d.phone, d.location, d.totalDonations, d.status, d.regDate])
+  ]));
   
   $('#ngo-search-input')?.addEventListener('input', renderAllNgos);
   $('#ngo-status-filter')?.addEventListener('change', renderAllNgos);
 
   $('#donor-search-input')?.addEventListener('input', renderDonors);
   $('#donor-type-filter')?.addEventListener('change', renderDonors);
+  $('#btn-add-donor-trigger')?.addEventListener('click', () => $('#modal-add-donor')?.classList.add('show'));
 
 
   $('#alert-priority-filter')?.addEventListener('change', renderAlertFeed);
@@ -730,6 +814,22 @@ function initModalHandlers() {
       const response = await request('/api/admin/notifications', { method: 'POST', body: { title: $('#broadcast-title').value.trim(), message: $('#broadcast-body').value.trim(), targetRole } });
       closeModals(); e.currentTarget.reset(); await fetchBackendData(); toast(response.message || 'Notification sent.', 'success');
     } catch (error) { notifyError(error); }
+  });
+  $('#form-add-donor')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form));
+    if (values.password !== values.confirmPassword) { toast('Passwords do not match.', 'error'); return; }
+    const button = form.querySelector('[type="submit"]');
+    try {
+      setLoading(button, true, 'Creating…');
+      const result = await request('/api/auth/register', { method: 'POST', body: values, auth: false });
+      form.reset();
+      $('#modal-add-donor')?.classList.remove('show');
+      toast(result.message || 'Donor account created.', 'success');
+      await Promise.all([fetchBackendData(), loadAccounts()]);
+    } catch (error) { notifyError(error); }
+    finally { setLoading(button, false); }
   });
 }
 
@@ -855,11 +955,11 @@ async function fetchBackendData() {
   if (analyticsData.analytics?.liveStatus) $('#kpi-active-donations').textContent = Number(analyticsData.analytics.liveStatus.available_donations || 0).toLocaleString();
   updateAnalyticsCharts(analyticsData.analytics || {});
   const safeDate = value => value ? new Date(value).toLocaleDateString() : '—';
-  state.donations = (donationsData.donations || []).map(d => ({ id: String(d.id), donor: d.business_name || 'Business partner', foodName: d.food_name || 'Food donation', category: d.category_name || 'Uncategorised', quantity: d.quantity || '—', location: d.pickup_city || d.business_city || '—', postedDate: safeDate(d.created_at), expiryText: d.expiry_time ? `Recorded deadline: ${safeDate(d.expiry_time)}` : 'Deadline unavailable', assignedNgo: d.ngo_name || 'Unassigned', status: d.status || 'available' }));
-  state.donors = (businessesData.businesses || []).map(b => ({ id: String(b.id), name: b.business_name || b.full_name || 'Business partner', category: b.role || 'business', email: b.email || '—', phone: b.mobile || '—', location: b.city || '—', totalDonations: null, status: b.account_status || 'pending', regDate: safeDate(b.created_at) }));
-  const mappedNgos = (ngosData.ngos || []).map(n => ({ id: String(n.id), name: n.ngo_name || n.full_name || 'NGO', contactPerson: n.full_name || '—', email: n.email || '—', phone: n.mobile || '—', location: n.city || '—', taxId: n.registration_number || '—', status: n.account_status === 'active' ? 'verified' : (n.account_status || 'pending'), claimedCount: null, regDate: safeDate(n.created_at) }));
+  state.donations = (donationsData.donations || []).map(d => ({ id: String(d.id), donor: d.business_name || d.owner_name || 'Business partner', foodName: d.food_name || 'Food donation', category: d.category_name || 'Uncategorised', quantity: d.quantity || '—', location: d.pickup_city || d.business_city || '—', postedAt: d.created_at, postedDate: safeDate(d.created_at), expiryAt: d.expiry_time, expiryText: d.expiry_time ? `Recorded deadline: ${safeDate(d.expiry_time)}` : 'Deadline unavailable', assignedNgo: d.ngo_name || 'Unassigned', status: d.status || 'available' }));
+  state.donors = (businessesData.businesses || []).map(b => ({ id: String(b.id), name: b.business_name || b.full_name || 'Business partner', category: b.role || 'business', email: b.email || '—', phone: b.mobile || '—', location: b.city || '—', totalDonations: Number(b.donation_count || 0), status: b.account_status || 'pending', regDate: safeDate(b.created_at) }));
+  const mappedNgos = (ngosData.ngos || []).map(n => ({ id: String(n.id), name: n.ngo_name || n.full_name || 'NGO', contactPerson: n.full_name || '—', email: n.email || '—', phone: n.mobile || '—', location: n.city || '—', taxId: n.registration_number || '—', isVerified: Boolean(n.is_verified), status: n.account_status || 'pending', claimedCount: Number(n.claimed_count || 0), regDate: safeDate(n.created_at) }));
   state.pendingNgos = mappedNgos.filter(n => n.status === 'pending');
-  state.ngos = mappedNgos.filter(n => n.status !== 'pending');
+  state.ngos = mappedNgos;
   const pickupStep = status => ['delivered', 'completed'].includes(status) ? 3 : ['pickup_started', 'food_collected', 'on_the_way'].includes(status) ? 2 : ['pickup_scheduled', 'volunteer_assigned'].includes(status) ? 1 : 0;
   state.pickups = (pickupsData.pickups || []).map(p => ({ id: String(p.id), donationId: String(p.donation_id), donorName: p.donor_name || 'Unavailable', ngoName: p.ngo_name || 'Unavailable', receiverName: p.distribution_location || 'Unavailable', eta: p.updated_at ? safeDate(p.updated_at) : 'Unavailable', step: pickupStep(p.status), status: p.status === 'volunteer_assigned' ? 'pickup_scheduled' : p.status }));
   const pickupSummary = pickupsData.summary || {};

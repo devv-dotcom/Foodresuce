@@ -1,6 +1,15 @@
 const pool = require('../config/database');
 const { BUSINESS_ROLES } = require('../config/roles');
 const buildIn = items => items.map(() => '?').join(', ');
+const pageSql = (limit, offset) => {
+  const requestedLimit = Number(limit);
+  const requestedOffset = Number(offset);
+  const safeLimit = Number.isSafeInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 100) : 20;
+  const safeOffset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0;
+  // TiDB does not accept bound parameters in LIMIT/OFFSET. Only validated
+  // integers are interpolated; every user-supplied filter remains parameterized.
+  return `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
+};
 
 module.exports = {
   async findByEmail(email) {
@@ -34,19 +43,19 @@ module.exports = {
     const clauses = [`u.role IN (${buildIn(BUSINESS_ROLES)})`]; const values = [...BUSINESS_ROLES];
     if (q) { clauses.push('(u.full_name LIKE ? OR u.business_name LIKE ? OR u.email LIKE ? OR u.city LIKE ?)'); values.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
     if (category && BUSINESS_ROLES.includes(category)) { clauses.push('u.role = ?'); values.push(category); }
-    const [rows] = await pool.execute(`SELECT u.id, u.full_name, u.email, u.mobile, u.business_name, u.role, u.city, u.state, u.created_at, bp.account_status FROM users u LEFT JOIN business_profiles bp ON bp.user_id = u.id WHERE ${clauses.join(' AND ')} ORDER BY u.created_at DESC LIMIT ? OFFSET ?`, [...values, limit, offset]);
+    const [rows] = await pool.execute(`SELECT u.id, u.full_name, u.email, u.mobile, u.business_name, u.role, u.city, u.state, u.created_at, COALESCE(bp.account_status, u.account_status, 'pending') AS account_status, (SELECT COUNT(*) FROM donations d WHERE d.business_user_id = u.id AND d.deleted_at IS NULL) AS donation_count FROM users u LEFT JOIN business_profiles bp ON bp.user_id = u.id WHERE ${clauses.join(' AND ')} ORDER BY u.created_at DESC ${pageSql(limit, offset)}`, values);
     return rows;
   },
   async listNgos({ q, limit, offset }) {
     const values = []; let where = "u.role = 'ngo'";
     if (q) { where += ' AND (u.full_name LIKE ? OR n.ngo_name LIKE ? OR u.email LIKE ? OR u.city LIKE ?)'; values.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
-    const [rows] = await pool.execute(`SELECT n.id AS ngo_id, u.id, u.full_name, u.email, u.mobile, u.city, u.state, u.created_at, n.ngo_name, n.registration_number, n.account_status FROM ngos n JOIN users u ON u.id = n.user_id WHERE ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?`, [...values, limit, offset]);
+    const [rows] = await pool.execute(`SELECT n.id AS ngo_id, u.id, u.full_name, u.email, u.mobile, u.city, u.state, u.is_verified, u.created_at, n.ngo_name, n.registration_number, n.account_status, (SELECT COUNT(*) FROM accepted_donations ad WHERE ad.ngo_id = n.id AND ad.status <> 'cancelled') AS claimed_count FROM ngos n JOIN users u ON u.id = n.user_id WHERE ${where} ORDER BY u.created_at DESC ${pageSql(limit, offset)}`, values);
     return rows;
   },
   async listVolunteers({ q, limit, offset }) {
     const values = []; let where = "u.role = 'volunteer'";
     if (q) { where += ' AND (u.full_name LIKE ? OR u.email LIKE ? OR u.city LIKE ?)'; values.push(`%${q}%`, `%${q}%`, `%${q}%`); }
-    const [rows] = await pool.execute(`SELECT v.id AS volunteer_id, u.id, u.full_name, u.email, u.mobile, u.city, u.state, u.created_at, v.vehicle_type, v.availability, v.account_status, v.rating, v.completed_deliveries FROM volunteers v JOIN users u ON u.id = v.user_id WHERE ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?`, [...values, limit, offset]);
+    const [rows] = await pool.execute(`SELECT v.id AS volunteer_id, u.id, u.full_name, u.email, u.mobile, u.city, u.state, u.created_at, v.vehicle_type, v.availability, v.account_status, v.rating, v.completed_deliveries FROM volunteers v JOIN users u ON u.id = v.user_id WHERE ${where} ORDER BY u.created_at DESC ${pageSql(limit, offset)}`, values);
     return rows;
   },
   async setAccountStatus(connection, kind, userId, status) {

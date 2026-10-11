@@ -404,11 +404,9 @@
           <div class="pagination-bar">
             <div>Showing <span id="donation-showing-count">0</span> of <span id="donation-total-count">0</span> loaded entries</div>
             <div class="pagination-controls" id="donation-pagination-controls">
-              <button class="page-btn">&laquo;</button>
-              <button class="page-btn active">1</button>
-              <button class="page-btn">2</button>
-              <button class="page-btn">3</button>
-              <button class="page-btn">&raquo;</button>
+              <button class="page-btn" type="button" data-page-action="previous" aria-label="Previous page">&laquo;</button>
+              <span id="donation-page-label">Page 1 of 1</span>
+              <button class="page-btn" type="button" data-page-action="next" aria-label="Next page">&raquo;</button>
             </div>
           </div>
         </div>
@@ -439,7 +437,9 @@
               <select class="select-filter" id="ngo-status-filter">
                 <option value="all">All Account Statuses</option>
                 <option value="active">Active Only</option>
+                <option value="pending">Pending Verification</option>
                 <option value="suspended">Suspended Only</option>
+                <option value="rejected">Rejected</option>
               </select>
             </div>
 
@@ -477,7 +477,7 @@
               <h3>Donor Directory & Management</h3>
               <p>Manage restaurants, supermarkets, hotels, catering partners, and individual donors</p>
             </div>
-            <button type="button" class="btn-primary-cta" id="btn-add-donor-trigger">+ Add Donor Account</button>
+            <div class="panel-controls"><button type="button" class="btn-secondary" id="btn-export-donors">Export Donor Directory</button><button type="button" class="btn-primary-cta" id="btn-add-donor-trigger">+ Add Donor Account</button></div>
           </div>
 
           <div class="panel-controls" style="margin-bottom: 16px;">
@@ -822,6 +822,36 @@
       <div class="modal-footer" id="ngo-profile-modal-footer">
         <!-- Actions -->
       </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-donation-details">
+    <div class="modal-card">
+      <div class="modal-header"><h3 class="modal-title">Donation details</h3><button type="button" class="modal-close-btn" aria-label="Close">&times;</button></div>
+      <div class="modal-body" id="donation-details-modal-body"></div>
+      <div class="modal-footer"><button type="button" class="btn-secondary modal-close-btn">Close</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-add-donor">
+    <div class="modal-card">
+      <div class="modal-header"><h3 class="modal-title">Add donor account</h3><button type="button" class="modal-close-btn" aria-label="Close">&times;</button></div>
+      <form id="form-add-donor">
+        <div class="modal-body account-form-grid">
+          <label>Contact name<input name="fullName" required maxlength="120"></label>
+          <label>Business name<input name="businessName" required maxlength="160"></label>
+          <label>Email<input name="email" type="email" required maxlength="255"></label>
+          <label>Phone<input name="mobile" type="tel" required maxlength="20"></label>
+          <label>Business type<select name="role" required><option value="restaurant">Restaurant</option><option value="hotel">Hotel</option><option value="bakery">Bakery</option><option value="supermarket">Supermarket</option><option value="catering">Catering</option><option value="marriage_hall">Marriage hall</option></select></label>
+          <label>Temporary password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+          <label>Confirm password<input name="confirmPassword" type="password" required minlength="8" autocomplete="new-password"></label>
+          <label class="account-form-wide">Street address<input name="address" required maxlength="255"></label>
+          <label>City<input name="city" required maxlength="100"></label>
+          <label>State / region<input name="state" required maxlength="100"></label>
+          <label>Postal code<input name="pincode" required maxlength="12"></label>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn-secondary modal-close-btn">Cancel</button><button type="submit" class="btn-primary-cta">Create donor account</button></div>
+      </form>
     </div>
   </div>
 
