@@ -2,7 +2,7 @@ import { request, notifyError, getSession } from './api.js';
 import { $, $$, escapeHtml, setLoading, toast } from './utils.js';
 
 // Admin lists start empty and are populated only by protected API responses.
-const state = { donations: [], ngos: [], pendingNgos: [], donors: [], pickups: [], alerts: [], activityLogs: [], donationPage: 0 };
+const state = { donations: [], ngos: [], pendingNgos: [], donors: [], pickups: [], alerts: [], activityLogs: [], donationPage: 0, listErrors: {} };
 const DONATIONS_PER_PAGE = 10;
 const accountState = { rows: [], total: 0, offset: 0, limit: 25, selected: null, action: null, timer: null };
 
@@ -365,7 +365,7 @@ function renderAllDonations() {
 
   // Render main donations table
   tbody.innerHTML = filtered.length === 0 
-    ? `<tr><td colspan="10" style="text-align:center; padding:32px; color:#64748b;">No food donations match your filters.</td></tr>`
+    ? `<tr><td colspan="10" style="text-align:center; padding:32px; color:#64748b;">${state.listErrors.donations ? 'Donation records could not be loaded. <button type="button" class="btn-secondary" onclick="window.refreshAdminData()">Retry</button>' : 'No food donations match your filters.'}</td></tr>`
     : pageRows.map(d => {
         return `
           <tr>
@@ -524,7 +524,7 @@ function renderAllNgos() {
         </div>
       </td>
     </tr>
-  `).join('') : `<tr><td colspan="8" class="account-empty">${state.ngos.length ? 'No NGOs match these filters.' : 'No active or suspended NGO accounts were returned.'}</td></tr>`;
+  `).join('') : `<tr><td colspan="8" class="account-empty">${state.listErrors.ngos ? 'NGO accounts could not be loaded. <button type="button" class="btn-secondary" onclick="window.refreshAdminData()">Retry</button>' : state.ngos.length ? 'No NGOs match these filters.' : 'No NGO accounts were found.'}</td></tr>`;
 }
 
 window.toggleNgoStatus = async (id, newStatus) => {
@@ -615,7 +615,7 @@ function renderDonors() {
         <button type="button" class="icon-action-btn" title="View donor details" onclick="window.viewDonorAccount('${d.id}')">👁️</button>
       </td>
     </tr>
-  `).join('') : `<tr><td colspan="8" class="account-empty">${state.donors.length ? 'No donors match these filters.' : 'No donor accounts were returned.'}</td></tr>`;
+  `).join('') : `<tr><td colspan="8" class="account-empty">${state.listErrors.donors ? 'Donor accounts could not be loaded. <button type="button" class="btn-secondary" onclick="window.refreshAdminData()">Retry</button>' : state.donors.length ? 'No donors match these filters.' : 'No donor accounts were found.'}</td></tr>`;
 }
 
 window.viewDonorAccount = id => openAccount(id);
@@ -900,6 +900,8 @@ async function fetchBackendData() {
     ['/api/admin/donations?limit=100', '/api/admin/donations'],
     ['/api/admin/businesses?limit=100', '/api/admin/businesses'],
     ['/api/admin/ngos?limit=100', '/api/admin/ngos'],
+    ['/api/admin/accounts?role=donor&limit=100', '/api/admin/donor-accounts'],
+    ['/api/admin/accounts?role=ngo&limit=100', '/api/admin/ngo-accounts'],
     ['/api/admin/notifications?limit=50', '/api/admin/notifications'],
     ['/api/admin/activity-logs?limit=50', '/api/admin/activity-logs'],
     ['/api/admin/analytics', '/api/admin/analytics'],
@@ -916,6 +918,8 @@ async function fetchBackendData() {
   const donationsResponse = responses['/api/admin/donations'];
   const businessesResponse = responses['/api/admin/businesses'];
   const ngosResponse = responses['/api/admin/ngos'];
+  const donorAccountsResponse = responses['/api/admin/donor-accounts'];
+  const ngoAccountsResponse = responses['/api/admin/ngo-accounts'];
   const notificationsResponse = responses['/api/admin/notifications'];
   const logsResponse = responses['/api/admin/activity-logs'];
   const analyticsResponse = responses['/api/admin/analytics'];
@@ -932,6 +936,8 @@ async function fetchBackendData() {
   const donationsData = safe(donationsResponse);
   const businessesData = safe(businessesResponse);
   const ngosData = safe(ngosResponse);
+  const donorAccountsData = safe(donorAccountsResponse);
+  const ngoAccountsData = safe(ngoAccountsResponse);
   const notificationsData = safe(notificationsResponse);
   const logsData = safe(logsResponse);
   const analyticsData = safe(analyticsResponse);
@@ -955,9 +961,26 @@ async function fetchBackendData() {
   if (analyticsData.analytics?.liveStatus) $('#kpi-active-donations').textContent = Number(analyticsData.analytics.liveStatus.available_donations || 0).toLocaleString();
   updateAnalyticsCharts(analyticsData.analytics || {});
   const safeDate = value => value ? new Date(value).toLocaleDateString() : '—';
+  state.listErrors = {
+    donations: results[1].status === 'rejected',
+    donors: results[2].status === 'rejected' && results[4].status === 'rejected',
+    ngos: results[3].status === 'rejected' && results[5].status === 'rejected'
+  };
   state.donations = (donationsData.donations || []).map(d => ({ id: String(d.id), donor: d.business_name || d.owner_name || 'Business partner', foodName: d.food_name || 'Food donation', category: d.category_name || 'Uncategorised', quantity: d.quantity || '—', location: d.pickup_city || d.business_city || '—', postedAt: d.created_at, postedDate: safeDate(d.created_at), expiryAt: d.expiry_time, expiryText: d.expiry_time ? `Recorded deadline: ${safeDate(d.expiry_time)}` : 'Deadline unavailable', assignedNgo: d.ngo_name || 'Unassigned', status: d.status || 'available' }));
-  state.donors = (businessesData.businesses || []).map(b => ({ id: String(b.id), name: b.business_name || b.full_name || 'Business partner', category: b.role || 'business', email: b.email || '—', phone: b.mobile || '—', location: b.city || '—', totalDonations: Number(b.donation_count || 0), status: b.account_status || 'pending', regDate: safeDate(b.created_at) }));
-  const mappedNgos = (ngosData.ngos || []).map(n => ({ id: String(n.id), name: n.ngo_name || n.full_name || 'NGO', contactPerson: n.full_name || '—', email: n.email || '—', phone: n.mobile || '—', location: n.city || '—', taxId: n.registration_number || '—', isVerified: Boolean(n.is_verified), status: n.account_status || 'pending', claimedCount: Number(n.claimed_count || 0), regDate: safeDate(n.created_at) }));
+  const donorAccounts = donorAccountsData.accounts || [];
+  const businessesById = new Map((businessesData.businesses || []).map(b => [String(b.id), b]));
+  const donorRows = donorAccounts.length ? donorAccounts : (businessesData.businesses || []);
+  state.donors = donorRows.map(account => {
+    const business = businessesById.get(String(account.id)) || {};
+    return { id: String(account.id), name: account.business_name || business.business_name || account.full_name || business.full_name || 'Business partner', category: account.role || business.role || 'business', email: account.email || business.email || '—', phone: account.mobile || business.mobile || '—', location: account.city || business.city || '—', totalDonations: Number(business.donation_count ?? account.donation_count ?? 0), status: account.account_status || business.account_status || 'pending', regDate: safeDate(account.created_at || business.created_at) };
+  });
+  const ngoAccounts = ngoAccountsData.accounts || [];
+  const ngosById = new Map((ngosData.ngos || []).map(n => [String(n.id), n]));
+  const ngoRows = ngoAccounts.length ? ngoAccounts : (ngosData.ngos || []);
+  const mappedNgos = ngoRows.map(account => {
+    const ngo = ngosById.get(String(account.id)) || {};
+    return { id: String(account.id), name: account.ngo_name || ngo.ngo_name || account.full_name || ngo.full_name || 'NGO', contactPerson: account.full_name || ngo.full_name || '—', email: account.email || ngo.email || '—', phone: account.mobile || ngo.mobile || '—', location: account.city || ngo.city || '—', taxId: account.registration_number || ngo.registration_number || '—', isVerified: Number(account.is_verified ?? ngo.is_verified) === 1, status: account.account_status || ngo.account_status || 'pending', claimedCount: Number(ngo.claimed_count || 0), regDate: safeDate(account.created_at || ngo.created_at) };
+  });
   state.pendingNgos = mappedNgos.filter(n => n.status === 'pending');
   state.ngos = mappedNgos;
   const pickupStep = status => ['delivered', 'completed'].includes(status) ? 3 : ['pickup_started', 'food_collected', 'on_the_way'].includes(status) ? 2 : ['pickup_scheduled', 'volunteer_assigned'].includes(status) ? 1 : 0;
@@ -971,3 +994,5 @@ async function fetchBackendData() {
   state.activityLogs = (logsData.logs || []).map(l => ({ actor: l.actor_name || l.actor || 'System', action: l.action || 'Activity recorded', time: safeDate(l.created_at) }));
   renderAllDonations(); renderPendingNgos(); renderAllNgos(); renderDonors(); renderPickupsTimeline(); renderAlertFeed(); renderActivityLogs();
 }
+
+window.refreshAdminData = fetchBackendData;
