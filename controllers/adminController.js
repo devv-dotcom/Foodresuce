@@ -46,15 +46,21 @@ exports.listNgos = async (req, res, next) => { try { return res.json({ success: 
 exports.listVolunteers = async (req, res, next) => { try { return res.json({ success: true, volunteers: await Admin.listVolunteers({ q: req.query.q?.trim(), ...page(req.query) }) }); } catch (error) { next(error); } };
 
 const changeAccount = (kind, status, message) => async (req, res, next) => {
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     await connection.beginTransaction();
     const [result] = await Admin.setAccountStatus(connection, kind, req.params.id, status);
     if (!result.affectedRows) { await connection.rollback(); return res.status(404).json({ success: false, message: `${kind[0].toUpperCase() + kind.slice(1)} not found.` }); }
     await connection.commit();
     await log(req, `${kind}_${status}`, kind, Number(req.params.id));
     return res.json({ success: true, message });
-  } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
+  } catch (error) {
+    if (connection) {
+      try { await connection.rollback(); } catch (_) { /* Preserve the original database error. */ }
+    }
+    next(error);
+  } finally { connection?.release(); }
 };
 exports.approveBusiness = changeAccount('business', 'active', 'Business Approved Successfully');
 exports.rejectBusiness = changeAccount('business', 'rejected', 'Business Rejected Successfully');
@@ -65,15 +71,21 @@ exports.rejectNgo = changeAccount('ngo', 'rejected', 'NGO Rejected Successfully'
 exports.suspendNgo = changeAccount('ngo', 'suspended', 'NGO Suspended Successfully');
 
 const deleteAccount = kind => async (req, res, next) => {
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     await connection.beginTransaction();
     const [result] = await Admin.deleteUser(connection, kind, req.params.id);
     if (!result.affectedRows) { await connection.rollback(); return res.status(404).json({ success: false, message: `${kind[0].toUpperCase() + kind.slice(1)} not found.` }); }
     await connection.commit();
     await log(req, `${kind}_deleted`, kind, Number(req.params.id));
     return res.json({ success: true, message: `${kind[0].toUpperCase() + kind.slice(1)} deleted successfully.` });
-  } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
+  } catch (error) {
+    if (connection) {
+      try { await connection.rollback(); } catch (_) { /* Preserve the original database error. */ }
+    }
+    next(error);
+  } finally { connection?.release(); }
 };
 exports.deleteBusiness = deleteAccount('business');
 exports.deleteNgo = deleteAccount('ngo');
@@ -91,17 +103,57 @@ exports.listDonations = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+exports.donationDetails = async (req, res, next) => {
+  const id = String(req.params.id || '');
+  if (!/^\d{1,16}$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) < 1) {
+    return res.status(400).json({ success: false, message: 'A valid donation ID is required.' });
+  }
+  try {
+    const donation = await Donation.findAdminDetails(Number(id));
+    if (!donation) return res.status(404).json({ success: false, message: 'Donation not found.' });
+    return res.json({ success: true, donation });
+  } catch (error) { next(error); }
+};
+
 exports.updateDonationStatus = async (req, res, next) => {
   try {
-    const [result] = await pool.execute('UPDATE donations SET status = ? WHERE id = ? AND deleted_at IS NULL', [req.body.status, req.params.id]);
-    if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Donation not found.' });
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ success: false, message: 'A valid donation ID is required.' });
+    if (req.body.status !== 'cancelled') return res.status(422).json({ success: false, message: 'Administrators can cancel available donations here. In-progress donations must be updated through their pickup workflow.' });
+    const connection = await pool.getConnection();
+    let result;
+    try {
+      await connection.beginTransaction();
+      const [[donation]] = await connection.execute('SELECT id, status FROM donations WHERE id = ? AND deleted_at IS NULL FOR UPDATE', [id]);
+      if (!donation) {
+        await connection.rollback();
+        return res.status(404).json({ success: false, message: 'Donation not found.' });
+      }
+      if (donation.status !== 'available') {
+        await connection.rollback();
+        return res.status(409).json({ success: false, message: 'Only an unclaimed, available donation can be cancelled here.' });
+      }
+      const [[linked]] = await connection.execute(`SELECT
+        EXISTS (SELECT 1 FROM accepted_donations WHERE donation_id = ?) AS has_claim,
+        EXISTS (SELECT 1 FROM pickup_requests WHERE donation_id = ? AND status <> 'cancelled') AS has_active_pickup`, [id, id]);
+      if (Number(linked.has_claim) || Number(linked.has_active_pickup)) {
+        await connection.rollback();
+        return res.status(409).json({ success: false, message: 'This donation has claim or pickup history. Update it through its assigned workflow.' });
+      }
+      [result] = await connection.execute("UPDATE donations SET status = 'cancelled' WHERE id = ? AND status = 'available' AND deleted_at IS NULL", [id]);
+      await connection.commit();
+    } catch (error) {
+      try { await connection.rollback(); } catch (_) { /* Preserve the original error. */ }
+      throw error;
+    } finally { connection.release(); }
+    if (!result.affectedRows) return res.status(409).json({ success: false, message: 'Donation status changed. Refresh and try again.' });
     await log(req, 'donation_status_updated', 'donation', Number(req.params.id), { status: req.body.status });
     return res.json({ success: true, message: 'Donation status updated successfully.' });
   } catch (error) { next(error); }
 };
 exports.deleteDonation = async (req, res, next) => {
   try {
-    const [result] = await pool.execute("UPDATE donations SET deleted_at = CURRENT_TIMESTAMP, status = 'cancelled' WHERE id = ? AND deleted_at IS NULL", [req.params.id]);
+    const [result] = await pool.execute('UPDATE donations SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
     if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Donation not found or already deleted.' });
     await log(req, 'donation_deleted', 'donation', Number(req.params.id));
     return res.json({ success: true, message: 'Donation deleted successfully.' });
@@ -109,7 +161,7 @@ exports.deleteDonation = async (req, res, next) => {
 };
 exports.restoreDonation = async (req, res, next) => {
   try {
-    const [result] = await pool.execute("UPDATE donations SET deleted_at = NULL, status = 'available' WHERE id = ? AND deleted_at IS NOT NULL", [req.params.id]);
+    const [result] = await pool.execute('UPDATE donations SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL', [req.params.id]);
     if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Deleted donation not found.' });
     await log(req, 'donation_restored', 'donation', Number(req.params.id));
     return res.json({ success: true, message: 'Donation restored successfully.' });

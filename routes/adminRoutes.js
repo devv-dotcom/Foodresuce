@@ -16,6 +16,7 @@ const router = express.Router();
 router.post('/login', rateLimit(), adminLoginValidation, admin.login);
 router.use(authenticate, authorizeRoles('admin'), requireActiveAdmin);
 router.get('/accounts', accounts.list);
+router.get('/accounts/export.csv', accounts.exportCsv);
 router.get('/accounts/:id', accounts.details);
 router.put('/accounts/:id', accounts.update);
 router.put('/accounts/:id/status', accounts.setStatus);
@@ -31,15 +32,17 @@ router.put('/business/approve/:id', admin.approveBusiness);
 router.put('/business/reject/:id', admin.rejectBusiness);
 router.put('/business/suspend/:id', admin.suspendBusiness);
 router.put('/business/activate/:id', admin.activateBusiness);
-router.delete('/business/:id', admin.deleteBusiness);
+// Route legacy delete URLs through the audited anonymization workflow.
+router.delete('/business/:id', accounts.remove);
 
 router.get('/ngos', admin.listNgos);
 router.put('/ngo/approve/:id', admin.approveNgo);
 router.put('/ngo/reject/:id', admin.rejectNgo);
 router.put('/ngo/suspend/:id', admin.suspendNgo);
-router.delete('/ngo/:id', admin.deleteNgo);
+router.delete('/ngo/:id', accounts.remove);
 
 router.get('/donations', admin.listDonations);
+router.get('/donation/:id', admin.donationDetails);
 router.put('/donation/status/:id', donationStatusValidation, admin.updateDonationStatus);
 router.delete('/donation/:id', admin.deleteDonation);
 router.put('/donation/restore/:id', admin.restoreDonation);

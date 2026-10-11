@@ -348,10 +348,15 @@
               <option value="all">All Statuses</option>
               <option value="available">Available</option>
               <option value="accepted">Accepted</option>
-              <option value="assigned">Assigned</option>
+              <option value="pickup_scheduled">Pickup Scheduled</option>
+              <option value="pickup_started">Pickup Started</option>
+              <option value="volunteer_assigned">Volunteer Assigned</option>
               <option value="picked_up">Picked Up</option>
+              <option value="food_collected">Food Collected</option>
+              <option value="distributed">Distributed</option>
               <option value="delivered">Delivered</option>
-              <option value="expired">Expired</option>
+              <option value="completed">Completed</option>
+              <option value="expired">Expired (by expiry date)</option>
               <option value="cancelled">Cancelled</option>
             </select>
 
@@ -362,13 +367,7 @@
               <option value="month">This Month</option>
             </select>
 
-            <select class="select-filter" id="donation-location-filter">
-              <option value="all">All Locations</option>
-              <option value="Downtown">Downtown</option>
-              <option value="North District">North District</option>
-              <option value="West Suburbs">West Suburbs</option>
-              <option value="East Side">East Side</option>
-            </select>
+            <select class="select-filter" id="donation-location-filter"><option value="all">All Locations</option></select>
 
             <select class="select-filter" id="donation-sort-filter">
               <option value="newest">Sort: Newest First</option>
@@ -441,6 +440,13 @@
                 <option value="suspended">Suspended Only</option>
                 <option value="rejected">Rejected</option>
               </select>
+              <select class="select-filter" id="ngo-sort-filter" aria-label="Sort NGOs">
+                <option value="created:desc">Sort: Newest First</option>
+                <option value="created:asc">Sort: Oldest First</option>
+                <option value="name:asc">Sort: Name A–Z</option>
+                <option value="name:desc">Sort: Name Z–A</option>
+                <option value="donations:desc">Sort: Most Claims</option>
+              </select>
             </div>
 
             <div class="table-responsive">
@@ -461,6 +467,10 @@
                   <!-- Injected NGO rows -->
                 </tbody>
               </table>
+            </div>
+            <div class="directory-pagination" id="ngo-pagination">
+              <span id="ngo-page-status" aria-live="polite">Loading NGO accounts…</span>
+              <div><button type="button" class="btn-secondary" data-directory-page="previous" data-directory-kind="ngos" aria-label="Previous NGO page">Previous</button><button type="button" class="btn-secondary" data-directory-page="next" data-directory-kind="ngos" aria-label="Next NGO page">Next</button></div>
             </div>
           </div>
         </div>
@@ -491,6 +501,14 @@
               <option value="supermarket">Supermarkets</option>
               <option value="catering">Catering & Events</option>
               <option value="bakery">Bakeries & Cafes</option>
+              <option value="marriage_hall">Marriage halls</option>
+            </select>
+            <select class="select-filter" id="donor-sort-filter" aria-label="Sort donors">
+              <option value="created:desc">Sort: Newest First</option>
+              <option value="created:asc">Sort: Oldest First</option>
+              <option value="name:asc">Sort: Name A–Z</option>
+              <option value="name:desc">Sort: Name Z–A</option>
+              <option value="donations:desc">Sort: Most Donations</option>
             </select>
           </div>
 
@@ -512,6 +530,10 @@
                 <!-- Injected Donors -->
               </tbody>
             </table>
+          </div>
+          <div class="directory-pagination" id="donor-pagination">
+            <span id="donor-page-status" aria-live="polite">Loading donor accounts…</span>
+            <div><button type="button" class="btn-secondary" data-directory-page="previous" data-directory-kind="donors" aria-label="Previous donor page">Previous</button><button type="button" class="btn-secondary" data-directory-page="next" data-directory-kind="donors" aria-label="Next donor page">Next</button></div>
           </div>
         </div>
       </section>
@@ -625,7 +647,7 @@
             <p>Comprehensive visualizations of food rescue operations and sustainability KPIs</p>
           </div>
           <div class="panel-controls">
-            <button type="button" class="btn-secondary" id="btn-generate-pdf-report">📄 Generate PDF Summary</button>
+              <button type="button" class="btn-secondary" id="btn-generate-pdf-report" data-pdf-report="monthly">📄 Generate PDF Summary</button>
           </div>
         </div>
 
@@ -716,7 +738,7 @@
               <h3>Admin & Audit Activity Log</h3>
               <p>Immutable event audit log recording all administrator actions and system state changes</p>
             </div>
-            <button type="button" class="btn-secondary" id="btn-export-audit-log">Export Audit Log</button>
+              <button type="button" class="btn-secondary" id="btn-export-audit-log">Export Recent Audit Log</button>
           </div>
 
           <div class="log-timeline" id="full-activity-log-container">
@@ -738,22 +760,22 @@
             </div>
           </div>
           <div class="quick-actions-grid">
-            <div class="quick-action-card" id="qa-manage-ngos">
+            <button type="button" class="quick-action-card" id="qa-manage-ngos">
               <div class="qa-icon-circle" style="background:#eff6ff; color:#2563eb;">🏢</div>
               <strong>Manage NGOs</strong>
-            </div>
-            <div class="quick-action-card" id="qa-manage-users">
+            </button>
+            <button type="button" class="quick-action-card" id="qa-manage-users">
               <div class="qa-icon-circle" style="background:#fefce8; color:#a16207;">👥</div>
               <strong>Manage Users</strong>
-            </div>
-            <div class="quick-action-card" id="qa-view-reports">
+            </button>
+            <button type="button" class="quick-action-card" id="qa-view-reports">
               <div class="qa-icon-circle" style="background:#f3e8ff; color:#9333ea;">📊</div>
               <strong>View Reports</strong>
-            </div>
-            <div class="quick-action-card" id="qa-broadcast-notif">
+            </button>
+            <button type="button" class="quick-action-card" id="qa-broadcast-notif">
               <div class="qa-icon-circle" style="background:#fef2f2; color:#dc2626;">📢</div>
               <strong>Send Notification</strong>
-            </div>
+            </button>
           </div>
         </div>
       </section>
@@ -773,19 +795,19 @@
           <form id="system-settings-form" style="max-width: 680px;">
             <div class="form-group">
               <label>Platform Name</label>
-              <input type="text" class="form-input" value="Food Rescue Portal">
+              <input type="text" class="form-input" name="platform_name" value="Food Rescue Portal" maxlength="120" required>
             </div>
             <div class="form-group">
               <label>Auto-Expiry Threshold (Hours)</label>
-              <input type="number" class="form-input" value="24">
+              <input type="number" class="form-input" name="auto_expiry_hours" value="24" min="1" max="720" required>
             </div>
             <div class="form-group">
               <label>Default Search Radius (Kilometers)</label>
-              <input type="number" class="form-input" value="25">
+              <input type="number" class="form-input" name="default_search_radius_km" value="25" min="1" max="250" required>
             </div>
             <div class="form-group">
               <label>Admin Notification Email</label>
-              <input type="email" class="form-input" autocomplete="email" placeholder="alerts@your-organization.org">
+              <input type="email" class="form-input" name="admin_notification_email" autocomplete="email" maxlength="255" placeholder="alerts@your-organization.org">
             </div>
             <button type="submit" class="btn-primary-cta">Save System Settings</button>
           </form>

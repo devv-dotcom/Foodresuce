@@ -2,7 +2,7 @@ const pool = require('../config/database');
 const normalizeCoordinate = value => value === '' || value === undefined || value === null ? null : Number(value);
 
 const selectDonation = `
-  SELECT d.*, c.name AS category_name, u.business_name, u.full_name AS owner_name, u.city AS business_city,
+  SELECT d.*, c.name AS category_name, u.id AS donor_account_id, u.business_name, u.full_name AS owner_name, u.email AS donor_email, u.city AS business_city,
     (SELECT image_path FROM donation_images WHERE donation_id = d.id ORDER BY id ASC LIMIT 1) AS food_image,
     (SELECT n.ngo_name FROM accepted_donations ad JOIN ngos n ON n.id = ad.ngo_id WHERE ad.donation_id = d.id LIMIT 1) AS ngo_name
   FROM donations d
@@ -38,6 +38,17 @@ const Donation = {
   async findById(id) {
     const [rows] = await pool.execute(`${selectDonation} WHERE d.id = ? AND d.deleted_at IS NULL LIMIT 1`, [id]);
     return rows[0] || null;
+  },
+
+  async findAdminDetails(id) {
+    const [rows] = await pool.execute(`${selectDonation} WHERE d.id = ? AND d.deleted_at IS NULL LIMIT 1`, [id]);
+    if (!rows[0]) return null;
+    const [[assignment]] = await pool.execute(`SELECT ad.status AS assignment_status, ad.accepted_at,
+      n.user_id AS ngo_user_id, n.registration_number AS ngo_registration_number
+      FROM accepted_donations ad JOIN ngos n ON n.id = ad.ngo_id
+      WHERE ad.donation_id = ? LIMIT 1`, [id]);
+    const [images] = await pool.execute('SELECT id, image_path FROM donation_images WHERE donation_id = ? ORDER BY id ASC', [id]);
+    return { ...rows[0], ...(assignment || {}), images };
   },
 
   async getImages(donationId) {

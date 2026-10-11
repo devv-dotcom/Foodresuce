@@ -1,8 +1,9 @@
 const pool = require('../config/database');
 
 async function runAutoMigration() {
+  let connection;
   try {
-    const connection = await pool.getConnection();
+    connection = await pool.getConnection();
     try {
       const dbName = process.env.TIDB_DATABASE || process.env.DB_NAME || 'foodbridge';
 
@@ -70,6 +71,24 @@ async function runAutoMigration() {
       await ensureColumn('donations', 'safety_deadline_confirmed', 'BOOLEAN NOT NULL DEFAULT FALSE');
       await ensureColumn('donations', 'safety_accuracy_confirmed', 'BOOLEAN NOT NULL DEFAULT FALSE');
 
+      // Admin NGO/account detail queries join this optional profile table.
+      // Existing deployments may have the core NGOs table but predate this
+      // profile table, which otherwise makes the entire account list fail.
+      await connection.query(`CREATE TABLE IF NOT EXISTS ngo_profiles (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        ngo_id BIGINT UNSIGNED NOT NULL,
+        mission TEXT NULL,
+        service_area VARCHAR(160) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_ngo_profiles_ngo (ngo_id),
+        CONSTRAINT fk_ngo_profiles_ngo FOREIGN KEY (ngo_id) REFERENCES ngos(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB`);
+      await ensureColumn('ngo_profiles', 'mission', 'TEXT NULL');
+      await ensureColumn('ngo_profiles', 'service_area', 'VARCHAR(160) NULL');
+      await ensureIndex('ngo_profiles', 'uq_ngo_profiles_ngo', 'UNIQUE KEY uq_ngo_profiles_ngo (ngo_id)');
+
       // NGO-led pickup/distribution reuses the existing pickup and proof tables.
       await ensureColumn('pickup_requests', 'pickup_scheduled_at', 'DATETIME NULL');
       await ensureColumn('pickup_requests', 'pickup_started_at', 'DATETIME NULL');
@@ -132,20 +151,10 @@ async function runAutoMigration() {
       // Automated workflow notifications have no admin actor.
       await connection.query(`ALTER TABLE notifications MODIFY COLUMN created_by BIGINT UNSIGNED NULL`);
 
-      // NGOs and donor/business accounts are active immediately without
-      // administrator approval. Activate existing accounts during deployment.
-      try {
-        await connection.query("ALTER TABLE ngos MODIFY COLUMN account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'active'");
-        await connection.query("UPDATE ngos SET account_status = 'active' WHERE account_status = 'pending'");
-      } catch (err) {
-        console.warn('[MIGRATION] Could not activate existing NGO accounts:', err.message);
-      }
-      try {
-        await connection.query("ALTER TABLE business_profiles MODIFY COLUMN account_status ENUM('active', 'suspended', 'pending', 'rejected') NOT NULL DEFAULT 'active'");
-        await connection.query("UPDATE business_profiles SET account_status = 'active' WHERE account_status = 'pending'");
-      } catch (err) {
-        console.warn('[MIGRATION] Could not activate existing donor/business accounts:', err.message);
-      }
+      // Expand account-status enums without changing existing pending/rejected
+      // records. Existing review decisions are user data and must be preserved.
+      await connection.query("ALTER TABLE ngos MODIFY COLUMN account_status ENUM('active', 'pending', 'rejected', 'suspended') NOT NULL DEFAULT 'active'");
+      await connection.query("ALTER TABLE business_profiles MODIFY COLUMN account_status ENUM('active', 'suspended', 'pending', 'rejected') NOT NULL DEFAULT 'active'");
 
       await connection.query(`CREATE TABLE IF NOT EXISTS donation_conversations (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, donation_id BIGINT UNSIGNED NOT NULL,
@@ -174,7 +183,13 @@ async function runAutoMigration() {
       connection.release();
     }
   } catch (err) {
-    console.warn('[MIGRATION] Auto-migration skipped or database offline:', err.message);
+    if (connection) {
+      // Once a connection is established, a failed DDL migration means the
+      // schema may be partially updated. Fail startup instead of serving an
+      // application that silently has an incomplete database schema.
+      throw err;
+    }
+    console.warn('[MIGRATION] Database is unavailable during startup; serving read/write errors until it reconnects.');
   }
 }
 

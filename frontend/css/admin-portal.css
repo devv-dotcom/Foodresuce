@@ -498,6 +498,7 @@ body.admin-dashboard-body {
 
 .search-result-item {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
@@ -506,6 +507,16 @@ body.admin-dashboard-body {
   color: var(--text-main);
   transition: background 0.15s ease;
   cursor: pointer;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.search-empty-result {
+  padding: 6px 12px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 .search-result-item:hover {
@@ -1445,6 +1456,8 @@ body.admin-dashboard-body {
   transition: all 0.2s ease;
   text-decoration: none;
   color: var(--text-main);
+  font: inherit;
+  text-align: center;
 }
 
 .quick-action-card:hover {
@@ -1452,6 +1465,30 @@ body.admin-dashboard-body {
   border-color: var(--primary-green);
   transform: translateY(-3px);
   box-shadow: var(--shadow-md);
+}
+
+.directory-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.directory-pagination > div {
+  display: flex;
+  gap: 8px;
+}
+
+.directory-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 620px) {
+  .directory-pagination { align-items: flex-start; flex-direction: column; }
 }
 
 .qa-icon-circle {

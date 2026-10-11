@@ -6,20 +6,13 @@ This repository can run as one Render Node web service with a TiDB Cloud Starter
 
 Create a free TiDB Cloud Starter cluster and database named `foodbridge`. Save its host, username, and password. Use the cluster's TLS connection settings; the app uses port `4000` and TLS when `DB_SSL=true`.
 
-Initialize the database, in order, using a MySQL client connected to TiDB:
-
-1. `database/foodbridge.sql`
-2. `database/login_otp.sql`
-3. `database/patch_v2.sql`
-4. `database/patch_v3.sql`
-5. `database/patch_v4.sql`
-6. `database/patch_v5.sql`
+Initialize the database using `database/foodbridge.sql` from the repository root. It sources the core schema modules and the ordered OTP/workflow patches. The patches are idempotent; the status expansion preserves existing review decisions.
 
 The master SQL file uses MySQL-client `SOURCE` commands for the core modules, so run it from the repository root with a MySQL client rather than pasting it into a web SQL editor.
 
 ## 2. Configure free email delivery
 
-Create a free Resend account, add a domain you control, publish the DNS records Resend provides, and wait for the domain to verify. Set `RESEND_API_KEY` and `MAIL_FROM` (an address on that verified domain) in Render. The app sends OTP mail through Resend's HTTPS API, which works on Render's free web service. The existing Brevo integration remains available if `RESEND_API_KEY` is unset.
+Create a Brevo account and verify a sender address. Set `BREVO_API_KEY` and `MAIL_FROM` to that verified sender in Render. The app sends OTP mail through Brevo's HTTPS API, which works on Render's free web service. Resend is also available by setting `MAIL_PROVIDER=resend`, `RESEND_API_KEY`, and a sender on a verified Resend domain.
 
 ## 3. Deploy the web service
 
