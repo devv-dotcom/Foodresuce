@@ -49,7 +49,7 @@ module.exports = {
   async listNgos({ q, limit, offset }) {
     const values = []; let where = "u.role = 'ngo'";
     if (q) { where += ' AND (u.full_name LIKE ? OR n.ngo_name LIKE ? OR u.email LIKE ? OR u.city LIKE ?)'; values.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
-    const [rows] = await pool.execute(`SELECT n.id AS ngo_id, u.id, u.full_name, u.email, u.mobile, u.city, u.state, u.is_verified, u.created_at, n.ngo_name, n.registration_number, n.account_status, (SELECT COUNT(*) FROM accepted_donations ad WHERE ad.ngo_id = n.id AND ad.status <> 'cancelled') AS claimed_count FROM ngos n JOIN users u ON u.id = n.user_id WHERE ${where} ORDER BY u.created_at DESC ${pageSql(limit, offset)}`, values);
+    const [rows] = await pool.execute(`SELECT n.id AS ngo_id, u.id, u.full_name, u.email, u.mobile, u.city, u.state, u.is_verified, u.created_at, n.ngo_name, n.registration_number, COALESCE(n.account_status, u.account_status, 'pending') AS account_status, (SELECT COUNT(*) FROM accepted_donations ad WHERE ad.ngo_id = n.id AND ad.status <> 'cancelled') AS claimed_count FROM users u LEFT JOIN ngos n ON n.user_id = u.id WHERE ${where} ORDER BY u.created_at DESC ${pageSql(limit, offset)}`, values);
     return rows;
   },
   async listVolunteers({ q, limit, offset }) {
@@ -66,7 +66,12 @@ module.exports = {
        ON DUPLICATE KEY UPDATE account_status = VALUES(account_status)`,
       [status, userId, ...BUSINESS_ROLES]
     );
-    if (kind === 'ngo') return connection.execute("UPDATE ngos n JOIN users u ON u.id = n.user_id SET n.account_status = ? WHERE u.id = ? AND u.role = 'ngo'", [status, userId]);
+    if (kind === 'ngo') return connection.execute(
+      `INSERT INTO ngos (user_id, ngo_name, registration_number, account_status)
+       SELECT u.id, COALESCE(u.business_name, u.full_name), NULL, ? FROM users u WHERE u.id = ? AND u.role = 'ngo'
+       ON DUPLICATE KEY UPDATE account_status = VALUES(account_status)`,
+      [status, userId]
+    );
     return connection.execute("UPDATE volunteers v JOIN users u ON u.id = v.user_id SET v.account_status = ? WHERE u.id = ? AND u.role = 'volunteer'", [status, userId]);
   },
   async deleteUser(connection, kind, userId) {

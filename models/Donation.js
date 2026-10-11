@@ -6,8 +6,8 @@ const selectDonation = `
     (SELECT image_path FROM donation_images WHERE donation_id = d.id ORDER BY id ASC LIMIT 1) AS food_image,
     (SELECT n.ngo_name FROM accepted_donations ad JOIN ngos n ON n.id = ad.ngo_id WHERE ad.donation_id = d.id LIMIT 1) AS ngo_name
   FROM donations d
-  JOIN food_categories c ON c.id = d.category_id
-  JOIN users u ON u.id = d.business_user_id
+  LEFT JOIN food_categories c ON c.id = d.category_id
+  LEFT JOIN users u ON u.id = d.business_user_id
 `;
 
 const Donation = {
